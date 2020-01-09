@@ -87,16 +87,12 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 		PyDict_SetItemString(readingObject, "asset_code", assetVal);
 
 		/**
-		 * Save id, uuid, timestamp and user_timestamp
+		 * Save id, timestamp and user_timestamp
 		 */
 
 		// Add reading id
 		PyObject* readingId = PyLong_FromUnsignedLong((*elem)->getId());
 		PyDict_SetItemString(readingObject, "id", readingId);
-
-		// Add reading uuid
-		PyObject* assetKey = PyBytes_FromString((*elem)->getUuid().c_str());
-		PyDict_SetItemString(readingObject, "uuid", assetKey);
 
 		// Add reading timestamp
 		PyObject* readingTs = PyLong_FromUnsignedLong((*elem)->getTimestamp());
@@ -113,7 +109,6 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 		Py_CLEAR(newDataPoints);
 		Py_CLEAR(assetVal);
 		Py_CLEAR(readingId);
-		Py_CLEAR(assetKey);
 		Py_CLEAR(readingTs);
 		Py_CLEAR(readingUserTs);
 		Py_CLEAR(readingObject);
@@ -246,14 +241,6 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 			{
 				// Set user timestamp
 				newReading->setUserTimestamp(PyLong_AsUnsignedLong(uts));
-			}
-
-			// Get 'uuid' value: borrowed reference.
-			PyObject* uuid = PyDict_GetItemString(element, "uuid");
-			if (uuid && PyBytes_Check(uuid))
-			{
-				// Set uuid
-				newReading->setUuid(PyBytes_AsString(uuid));
 			}
 
 			// Remove temp objects

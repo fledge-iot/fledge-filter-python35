@@ -1,5 +1,5 @@
 .. Images
-.. |python35_1| image:: images/python35_1
+.. |python35_1| image:: images/python35_1.jpg
 
 .. Links
 .. |python27| raw:: html

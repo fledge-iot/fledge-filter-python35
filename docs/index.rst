@@ -4,7 +4,7 @@
 .. Links
 .. |python27| raw:: html
 
-   <a href="../fledge-filter-python27.html">fledge-filter-python27</a>
+   <a href="../fledge-filter-python27/index.html">fledge-filter-python27</a>
 
 Python 3.5 Filter
 =================
@@ -13,7 +13,7 @@ The *fledge-filter-python35* filter allows snippets of Python to be easily writt
 
 The user should provide a Python function whose name matches the name given to the plugin when added to the filter pipeline of the south service or north task, e.g. if you name your filter myPython then you should have a function named myPython in the code you enter. This function is send a set of readings to process and should return a set of processed readings. The returned set of readings may be empty if the filter removes all data.
 
-A general for of the function that should be provided is;
+A general code syntax for the function that should be provided is;
 
 .. code-block:: python
 
@@ -75,7 +75,7 @@ Python35 filters are added in the same way as any other filters.
 
   - Click on the Applications add icon for your service or task.
 
-  - Select the *python35-set* plugin from the list of available plugins.
+  - Select the *python35* plugin from the list of available plugins.
 
   - Name your python35 filter, this should be the same name as the Python function you will provide.
 
@@ -93,7 +93,7 @@ Python35 filters are added in the same way as any other filters.
 
          Any changes made to the script in this screen will **not** be written back to the original file it was loaded from.
 
-    - **Configuration**: You my enter a JSON document here that will be passed to the *set_filter_config* function of your Python code.
+    - **Configuration**: You may enter a JSON document here that will be passed to the *set_filter_config* function of your Python code.
 
   - Enable the python35 filter and click on *Done* to activate your plugin
 

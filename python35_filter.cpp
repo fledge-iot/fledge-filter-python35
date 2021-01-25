@@ -181,7 +181,7 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 		// dKey and dValue are borrowed references
 		while (PyDict_Next(reading, &dPos, &dKey, &dValue))
 		{
-			DatapointValue* dataPoint;
+			DatapointValue* dataPoint = NULL;
 			if (PyLong_Check(dValue) || PyLong_Check(dValue))
 			{
 				dataPoint = new DatapointValue((long)PyLong_AsUnsignedLongMask(dValue));
@@ -196,9 +196,10 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 			}
 			else
 			{
-				delete newReadings;
-				delete dataPoint;
-
+				if (newReading)
+				{
+					delete newReading;
+				}
 				return NULL;
 			}
 

@@ -194,6 +194,10 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 			{
 				dataPoint = new DatapointValue(string(PyBytes_AsString(dValue)));
 			}
+			else if (PyUnicode_Check(dValue))
+			{
+				dataPoint = new DatapointValue(std::string(PyUnicode_AsUTF8(dValue)));
+			}
 			else
 			{
 				if (newReading)

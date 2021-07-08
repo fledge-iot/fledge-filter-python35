@@ -64,6 +64,10 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 			{
 				value = PyFloat_FromDouble((*it)->getData().toDouble());
 			}
+			else if (dataType == DatapointValue::dataTagType::T_STRING)
+			{
+				value = PyBytes_FromString((*it)->getData().toStringValue().c_str());
+			}
 			else
 			{
 				value = PyBytes_FromString((*it)->getData().toString().c_str());
@@ -192,11 +196,15 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 			}
 			else if (PyBytes_Check(dValue))
 			{
-				dataPoint = new DatapointValue(string(PyBytes_AsString(dValue)));
+				string value = PyBytes_AsString(dValue);
+				fixQuoting(value);
+				dataPoint = new DatapointValue(value);
 			}
 			else if (PyUnicode_Check(dValue))
 			{
-				dataPoint = new DatapointValue(std::string(PyUnicode_AsUTF8(dValue)));
+				string value = PyUnicode_AsUTF8(dValue);
+				fixQuoting(value);
+				dataPoint = new DatapointValue(value);
 			}
 			else
 			{
@@ -677,4 +685,31 @@ bool Python35Filter::setScriptName()
 	}
 
 	return !m_pythonScript.empty();
+}
+
+/**
+ * Fix the quoting if the datapoint contians unescaped quotes
+ *
+ * @param str	Strign to fix the quoting of
+ */
+void Python35Filter::fixQuoting(string& str)
+{
+string newString;
+bool escape = false;
+
+	for (int i = 0; i < str.length(); i++)
+	{
+		if (str[i] == '\"' && escape == false)
+		{
+			newString += '\\';
+			newString += '\\';
+			newString += '\\';
+		}
+		else if (str[i] == '\\')
+		{
+			escape = !escape;
+		}
+		newString += str[i];
+	}
+	str = newString;
 }

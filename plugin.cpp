@@ -145,14 +145,13 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 		if (!openLibrary.empty())
 		{
 			libpython_handle = dlopen(openLibrary.c_str(),
-						  RTLD_LAZY | RTLD_GLOBAL);
+						  RTLD_LAZY | RTLD_LOCAL);
 			Logger::getLogger()->info("Pre-loading of library '%s' "
 						  "is needed on this system",
 						  openLibrary.c_str());
 		}
 #endif
 		Py_Initialize();
-		PyEval_InitThreads(); // Initialize and acquire the global interpreter lock (GIL)
 		PyThreadState* save = PyEval_SaveThread(); // release GIL
 		pyFilter->m_init = true;
 
@@ -258,6 +257,15 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	 * 3 - Transform results from fealter into new ReadingSet
 	 * 4 - Remove old data and pass new data set onwards
 	 */
+	 // FIXME_I:
+	if (! Py_IsInitialized()) {
+
+		//# FIXME_I
+		Logger::getLogger()->setMinLevel("debug");
+		Logger::getLogger()->debug("xxx3 %s - Not Py_IsInitialized ", __FUNCTION__);
+		Logger::getLogger()->setMinLevel("warning");
+		return;
+	}
 
 	PyGILState_STATE state = PyGILState_Ensure();
 
@@ -361,32 +369,45 @@ void plugin_shutdown(PLUGIN_HANDLE *handle)
 	FILTER_INFO *info = (FILTER_INFO *) handle;
 	Python35Filter* filter = info->handle;
 
-	PyGILState_STATE state = PyGILState_Ensure();
-
-	// Decrement pFunc reference count
-	Py_CLEAR(filter->m_pFunc);
-		
-	// Decrement pModule reference count
-	Py_CLEAR(filter->m_pModule);
+	//# FIXME_I
+	Logger::getLogger()->setMinLevel("debug");
+	Logger::getLogger()->debug("xxx3 %s - filter s1", __FUNCTION__);
+	Logger::getLogger()->setMinLevel("warning");
 
 	// Cleanup Python 3.5
 	if (filter->m_init)
 	{
+		//# FIXME_I
+		Logger::getLogger()->setMinLevel("debug");
+		Logger::getLogger()->debug("xxx3 %s - filter s2", __FUNCTION__);
+		Logger::getLogger()->setMinLevel("warning");
+
 		filter->m_init = false;
 
-		Py_Finalize();
+		if (Py_IsInitialized()) {
+
+			//# FIXME_I
+			Logger::getLogger()->setMinLevel("debug");
+			Logger::getLogger()->debug("xxx3 %s - filter s3", __FUNCTION__);
+			Logger::getLogger()->setMinLevel("warning");
+
+			PyGILState_STATE state = PyGILState_Ensure();
+
+			// Decrement pFunc reference count
+			Py_CLEAR(filter->m_pFunc);
+
+			// Decrement pModule reference count
+			Py_CLEAR(filter->m_pModule);
+
+
+			Py_Finalize();
+		}
 
 		if (libpython_handle)
 		{
 			dlclose(libpython_handle);
 		}
 	}
-	else
-	{
-		// Interpreter is still running, just release the GIL
-		PyGILState_Release(state);
-	}
-
 	// Remove filter object
 	delete filter;
 

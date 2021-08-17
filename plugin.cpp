@@ -257,13 +257,9 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	 * 3 - Transform results from fealter into new ReadingSet
 	 * 4 - Remove old data and pass new data set onwards
 	 */
-	 // FIXME_I:
 	if (! Py_IsInitialized()) {
 
-		//# FIXME_I
-		Logger::getLogger()->setMinLevel("debug");
-		Logger::getLogger()->debug("xxx3 %s - Not Py_IsInitialized ", __FUNCTION__);
-		Logger::getLogger()->setMinLevel("warning");
+		Logger::getLogger()->debug("%s - Python environment not initialized, exiting from the function ", __FUNCTION__);
 		return;
 	}
 
@@ -369,27 +365,12 @@ void plugin_shutdown(PLUGIN_HANDLE *handle)
 	FILTER_INFO *info = (FILTER_INFO *) handle;
 	Python35Filter* filter = info->handle;
 
-	//# FIXME_I
-	Logger::getLogger()->setMinLevel("debug");
-	Logger::getLogger()->debug("xxx3 %s - filter s1", __FUNCTION__);
-	Logger::getLogger()->setMinLevel("warning");
-
 	// Cleanup Python 3.5
 	if (filter->m_init)
 	{
-		//# FIXME_I
-		Logger::getLogger()->setMinLevel("debug");
-		Logger::getLogger()->debug("xxx3 %s - filter s2", __FUNCTION__);
-		Logger::getLogger()->setMinLevel("warning");
-
 		filter->m_init = false;
 
 		if (Py_IsInitialized()) {
-
-			//# FIXME_I
-			Logger::getLogger()->setMinLevel("debug");
-			Logger::getLogger()->debug("xxx3 %s - filter s3", __FUNCTION__);
-			Logger::getLogger()->setMinLevel("warning");
 
 			PyGILState_STATE state = PyGILState_Ensure();
 

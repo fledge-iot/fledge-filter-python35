@@ -73,6 +73,7 @@ class Python35Filter : public FledgeFilter
 		bool		m_init;
 
 	private:
+		void		fixQuoting(std::string& str);
 		// Scripts path
 		std::string	m_filtersPath;
 		// Configuration lock

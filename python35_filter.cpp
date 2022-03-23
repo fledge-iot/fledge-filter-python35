@@ -45,7 +45,7 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 	{
 		PythonReading *pyReading = (PythonReading *)(*elem);
 		// Add new object to the list
-		PyList_Append(readingsList, pyReading->toPython());
+		PyList_Append(readingsList, pyReading->toPython(true));
 	}
 
 	// Return pointer of new allocated list

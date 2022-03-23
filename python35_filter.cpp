@@ -13,6 +13,7 @@
 #include <strings.h>
 #include <string>
 #include <iostream>
+#include <pythonreading.h>
 
 #define PYTHON_SCRIPT_METHOD_PREFIX "_script_"
 #define PYTHON_SCRIPT_FILENAME_EXTENSION ".py"
@@ -42,80 +43,9 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
                                                       elem != readings.end();
                                                       ++elem)
 	{
-		// Create an object (dict) with 'asset_code' and 'readings' key
-		PyObject* readingObject = PyDict_New();
-
-		// Create object (dict) for reading Datapoints:
-		// this will be added as vale for key 'readings'
-		PyObject* newDataPoints = PyDict_New();
-
-		// Get all datapoints
-		std::vector<Datapoint *>& dataPoints = (*elem)->getReadingData();
-		for (auto it = dataPoints.begin(); it != dataPoints.end(); ++it)
-		{
-			PyObject* value;
-			DatapointValue::dataTagType dataType = (*it)->getData().getType();
-
-			if (dataType == DatapointValue::dataTagType::T_INTEGER)
-			{
-				value = PyLong_FromLong((*it)->getData().toInt());
-			}
-			else if (dataType == DatapointValue::dataTagType::T_FLOAT)
-			{
-				value = PyFloat_FromDouble((*it)->getData().toDouble());
-			}
-			else if (dataType == DatapointValue::dataTagType::T_STRING)
-			{
-				value = PyBytes_FromString((*it)->getData().toStringValue().c_str());
-			}
-			else
-			{
-				value = PyBytes_FromString((*it)->getData().toString().c_str());
-			}
-
-			// Add Datapoint: key and value
-			PyObject* key = PyBytes_FromString((*it)->getName().c_str());
-			PyDict_SetItem(newDataPoints,
-					key,
-					value);
-			
-			Py_CLEAR(key);
-			Py_CLEAR(value);
-		}
-
-		// Add reading datapoints
-		PyDict_SetItemString(readingObject, "reading", newDataPoints);
-
-		// Add reading asset name
-		PyObject* assetVal = PyBytes_FromString((*elem)->getAssetName().c_str());
-		PyDict_SetItemString(readingObject, "asset_code", assetVal);
-
-		/**
-		 * Save id, timestamp and user_timestamp
-		 */
-
-		// Add reading id
-		PyObject* readingId = PyLong_FromUnsignedLong((*elem)->getId());
-		PyDict_SetItemString(readingObject, "id", readingId);
-
-		// Add reading timestamp
-		PyObject* readingTs = PyLong_FromUnsignedLong((*elem)->getTimestamp());
-		PyDict_SetItemString(readingObject, "ts", readingTs);
-
-		// Add reading user timestamp
-		PyObject* readingUserTs = PyLong_FromUnsignedLong((*elem)->getUserTimestamp());
-		PyDict_SetItemString(readingObject, "user_ts", readingUserTs);
-
+		PythonReading *pyReading = (PythonReading *)(*elem);
 		// Add new object to the list
-		PyList_Append(readingsList, readingObject);
-
-		// Remove temp objects
-		Py_CLEAR(newDataPoints);
-		Py_CLEAR(assetVal);
-		Py_CLEAR(readingId);
-		Py_CLEAR(readingTs);
-		Py_CLEAR(readingUserTs);
-		Py_CLEAR(readingObject);
+		PyList_Append(readingsList, pyReading->toPython());
 	}
 
 	// Return pointer of new allocated list
@@ -154,116 +84,12 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 
 			return NULL;
 		}
+		Reading *reading = new PythonReading(element);
 
-		// Get 'asset_code' value: borrowed reference.
-		PyObject* assetCode = PyDict_GetItemString(element,
-							   "asset_code");
-		// Get 'reading' value: borrowed reference.
-		PyObject* reading = PyDict_GetItemString(element,
-							 "reading");
-		// Keys not found or reading is not a dict
-		if (!assetCode ||
-		    !reading ||
-		    !PyDict_Check(reading))
-		{
-			// Failure
-			if (PyErr_Occurred())
-			{
-				this->logErrorMessage();
-			}
-			delete newReadings;
-
-			return NULL;
-		}
-
-		// Fetch all Datapoins in 'reading' dict			
-		PyObject *dKey, *dValue;
-		Py_ssize_t dPos = 0;
-		Reading* newReading = NULL;
-
-		// Fetch all Datapoins in 'reading' dict
-		// dKey and dValue are borrowed references
-		while (PyDict_Next(reading, &dPos, &dKey, &dValue))
-		{
-			DatapointValue* dataPoint = NULL;
-			if (PyLong_Check(dValue) || PyLong_Check(dValue))
-			{
-				dataPoint = new DatapointValue((long)PyLong_AsUnsignedLongMask(dValue));
-			}
-			else if (PyFloat_Check(dValue))
-			{
-				dataPoint = new DatapointValue(PyFloat_AS_DOUBLE(dValue));
-			}
-			else if (PyBytes_Check(dValue))
-			{
-				string value = PyBytes_AsString(dValue);
-				fixQuoting(value);
-				dataPoint = new DatapointValue(value);
-			}
-			else if (PyUnicode_Check(dValue))
-			{
-				string value = PyUnicode_AsUTF8(dValue);
-				fixQuoting(value);
-				dataPoint = new DatapointValue(value);
-			}
-			else
-			{
-				if (newReading)
-				{
-					delete newReading;
-				}
-				return NULL;
-			}
-
-			// Add / Update the new Reading data			
-			if (newReading == NULL)
-			{
-				newReading = new Reading(string(PyBytes_AsString(assetCode)),
-							 new Datapoint(string(PyBytes_AsString(dKey)),
-								       *dataPoint));
-			}
-			else
-			{
-				newReading->addDatapoint(new Datapoint(string(PyBytes_AsString(dKey)),
-								       *dataPoint));
-			}
-
-			/**
-			 * Set id, uuid, ts and user_ts of the original data
-			 */
-
-			// Get 'id' value: borrowed reference.
-			PyObject* id = PyDict_GetItemString(element, "id");
-			if (id && PyLong_Check(id))
-			{
-				// Set id
-				newReading->setId(PyLong_AsUnsignedLong(id));
-			}
-
-			// Get 'ts' value: borrowed reference.
-			PyObject* ts = PyDict_GetItemString(element, "ts");
-			if (ts && PyLong_Check(ts))
-			{
-				// Set timestamp
-				newReading->setTimestamp(PyLong_AsUnsignedLong(ts));
-			}
-
-			// Get 'user_ts' value: borrowed reference.
-			PyObject* uts = PyDict_GetItemString(element, "user_ts");
-			if (uts && PyLong_Check(uts))
-			{
-				// Set user timestamp
-				newReading->setUserTimestamp(PyLong_AsUnsignedLong(uts));
-			}
-
-			// Remove temp objects
-			delete dataPoint;
-		}
-
-		if (newReading)
+		if (reading)
 		{
 			// Add the new reading to result vector
-			newReadings->push_back(newReading);
+			newReadings->push_back(reading);
 		}
 	}
 

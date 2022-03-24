@@ -43,8 +43,10 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
                                                       elem != readings.end();
                                                       ++elem)
 	{
+		// Create PythonReading object from readings data	
 		PythonReading *pyReading = (PythonReading *)(*elem);
-		// Add new object to the list
+
+		// Add new PythonReading object to the output list
 		PyList_Append(readingsList, pyReading->toPython(true));
 	}
 
@@ -84,6 +86,8 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 
 			return NULL;
 		}
+
+		// Create Reading object from Python object in the list
 		Reading *reading = new PythonReading(element);
 
 		if (reading)

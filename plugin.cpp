@@ -230,6 +230,11 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	 * 3 - Transform results from fealter into new ReadingSet
 	 * 4 - Remove old data and pass new data set onwards
 	 */
+	if (! Py_IsInitialized()) {
+
+		Logger::getLogger()->debug("%s - Python environment not initialized, exiting from the function ", __FUNCTION__);
+		return;
+	}
 
 	PyGILState_STATE state = PyGILState_Ensure();
 

@@ -21,6 +21,7 @@
 #include <filter_plugin.h>
 #include <filter.h>
 #include <version.h>
+#include <pyruntime.h>
 
 #include "python35.h"
 
@@ -134,33 +135,13 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 
 	// Embedded Python 3.5 program name
 	wchar_t *programName = Py_DecodeLocale(config->getName().c_str(), NULL);
-        Py_SetProgramName(programName);
+	Py_SetProgramName(programName);
 	PyMem_RawFree(programName);
-	// Embedded Python 3.5 initialisation
-	// Check first the interpreter is already set
-	if (!Py_IsInitialized())
-	{
-#ifdef PLUGIN_PYTHON_SHARED_LIBRARY
-		string openLibrary = TO_STRING(PLUGIN_PYTHON_SHARED_LIBRARY);
-		if (!openLibrary.empty())
-		{
-			libpython_handle = dlopen(openLibrary.c_str(),
-						  RTLD_LAZY | RTLD_GLOBAL);
-			Logger::getLogger()->info("Pre-loading of library '%s' "
-						  "is needed on this system",
-						  openLibrary.c_str());
-		}
-#endif
-		Py_Initialize();
-		PyEval_InitThreads(); // Initialize and acquire the global interpreter lock (GIL)
-		PyThreadState* save = PyEval_SaveThread(); // release GIL
-		pyFilter->m_init = true;
 
-		Logger::getLogger()->debug("Python interpteter is being initialised by "
-					   "filter (%s), name %s",
-					   FILTER_NAME,
-					   config->getName().c_str());
-	}
+	// Embedded Python 3.5 initialisation
+	PythonRuntime::getPythonRuntime();
+
+	pyFilter->m_init = true;
 
 	PyGILState_STATE state = PyGILState_Ensure(); // acquire GIL
 
@@ -193,19 +174,10 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 	bool ret = pyFilter->configure();
 	pyFilter->unlock();
 
-	if (!ret)
+	if (!ret &&  pyFilter->m_init)
 	{
-		// Cleanup Python 3.5
-		if (pyFilter->m_init)
-		{
-			pyFilter->m_init = false;
-			Py_Finalize();
-
-			if (libpython_handle)
-			{
-				dlclose(libpython_handle);
-			}
-		}
+		// Set init failure
+		pyFilter->m_init = false;
 	}
 
 	PyGILState_Release(state); // release GIL
@@ -369,23 +341,10 @@ void plugin_shutdown(PLUGIN_HANDLE *handle)
 	// Decrement pModule reference count
 	Py_CLEAR(filter->m_pModule);
 
-	// Cleanup Python 3.5
-	if (filter->m_init)
-	{
-		filter->m_init = false;
+	filter->m_init = false;
 
-		Py_Finalize();
-
-		if (libpython_handle)
-		{
-			dlclose(libpython_handle);
-		}
-	}
-	else
-	{
-		// Interpreter is still running, just release the GIL
-		PyGILState_Release(state);
-	}
+	// Interpreter is still running, just release the GIL
+	PyGILState_Release(state);
 
 	// Remove filter object
 	delete filter;

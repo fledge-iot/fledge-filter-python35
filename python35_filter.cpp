@@ -47,8 +47,10 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 		PythonReading *pyReading = (PythonReading *)(*elem);
 
 		// Add new PythonReading object to the output list
-		// Passing true sets keys to "reading" and "asset_code"
-		PyList_Append(readingsList, pyReading->toPython(true));
+		// Passing first parameter as true, sets keys to "reading" and "asset_code"
+		// Passing second parameter as strue, sets Bytes string for backwards compatibility
+		// for DICT keys and string values
+		PyList_Append(readingsList, pyReading->toPython(true, true));
 	}
 
 	// Return pointer of new allocated list

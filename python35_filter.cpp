@@ -38,6 +38,8 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 	// TODO add checks to all PyList_XYZ methods
 	PyObject* readingsList = PyList_New(0);
 
+	PyObject *temporary_item = NULL;
+
 	// Iterate the input readings
 	for (vector<Reading *>::const_iterator elem = readings.begin();
                                                       elem != readings.end();
@@ -50,7 +52,13 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 		// Passing first parameter as true, sets keys to "reading" and "asset_code"
 		// Passing second parameter as strue, sets Bytes string for backwards compatibility
 		// for DICT keys and string values
-		PyList_Append(readingsList, pyReading->toPython(true, true));
+
+		temporary_item = pyReading->toPython(true, true);
+
+		PyList_Append(readingsList, temporary_item);
+
+		Py_DECREF(temporary_item);
+		temporary_item =  NULL;
 	}
 
 	// Return pointer of new allocated list

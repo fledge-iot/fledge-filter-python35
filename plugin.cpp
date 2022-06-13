@@ -54,25 +54,40 @@ static void* libpython_handle = NULL;
  */
 
 // Filter default configuration
-#define DEFAULT_CONFIG "{\"plugin\" : { \"description\" : \"Python 3.5 filter plugin\", " \
-                       		"\"type\" : \"string\", " \
-				"\"readonly\": \"true\", " \
-				"\"default\" : \"" FILTER_NAME "\" }, " \
-			 "\"enable\": {\"description\": \"A switch that can be used to enable or disable execution of " \
-					 "the Python 3.5 filter.\", " \
-				"\"type\": \"boolean\", " \
-				"\"displayName\": \"Enabled\", " \
-				"\"default\": \"false\" }, " \
-			"\"config\" : {\"description\" : \"Python 3.5 filter configuration.\", " \
-				"\"type\" : \"JSON\", " \
-				"\"order\": \"2\", " \
-				"\"displayName\" : \"Configuration\", " \
-				"\"default\" : \"{}\"}, " \
-			"\"script\" : {\"description\" : \"Python 3.5 module to load.\", " \
-				"\"type\": \"script\", " \
-				"\"order\": \"1\", " \
-				"\"displayName\" : \"Python script\", " \
-				"\"default\": \"""\"} }"
+static const char *default_config = QUOTE({
+	"plugin" : {
+		"description" : "Python 3.5 filter plugin", 
+		"type" : "string", 
+		"readonly": "true",
+		"default" : FILTER_NAME
+		},
+	 "enable": {
+	 	"description": "A switch that can be used to enable or disable execution of the Python 3.5 filter.",
+		"type": "boolean",
+		"displayName": "Enabled",
+		"default": "false"
+		},
+	"config" : {
+		"description" : "Python 3.5 filter configuration.",
+		"type" : "JSON",
+		"order": "2",
+		"displayName" : "Configuration",
+		"default" : "{}"
+		},
+	"script" : {
+		"description" : "Python 3.5 module to load.",
+		"type": "script",
+		"order": "1",
+		"displayName" : "Python script",
+		"default": ""
+		},
+	"encode_attribute_names" : {
+		"description" : "Whether to encode/decode attribute names",
+		"type": "boolean",
+		"displayName": "Encode attribute names",
+		"default": "true"
+		},
+	});
 using namespace std;
 
 /**
@@ -88,7 +103,7 @@ static PLUGIN_INFORMATION info = {
         0,                        // Flags
         PLUGIN_TYPE_FILTER,       // Type
         "1.0.0",                  // Interface version
-	DEFAULT_CONFIG	          // Default plugin configuration
+	default_config	          // Default plugin configuration
 };
 
 typedef struct

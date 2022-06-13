@@ -86,7 +86,7 @@ static const char *default_config = QUOTE({
 		"type": "boolean",
 		"displayName": "Encode attribute names",
 		"default": "true"
-		},
+		}
 	});
 using namespace std;
 

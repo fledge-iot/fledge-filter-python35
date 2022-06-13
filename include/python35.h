@@ -79,7 +79,7 @@ class Python35Filter : public FledgeFilter
 		std::string	m_filtersPath;
 		// Configuration lock
 		std::mutex	m_configMutex;
-
+		// Encode and decode attribute names for compatibility
 		bool		m_encode_names;
 };
 #endif

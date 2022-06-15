@@ -53,7 +53,7 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 		// Passing second parameter as strue, sets Bytes string for backwards compatibility
 		// for DICT keys and string values
 
-		temporary_item = pyReading->toPython(true, true);
+		temporary_item = pyReading->toPython(true, m_encode_names);
 
 		PyList_Append(readingsList, temporary_item);
 
@@ -282,6 +282,13 @@ bool Python35Filter::reconfigure(const string& newConfig)
 				category.getValue("enable").compare("True") == 0;
 	}
 
+	// Set encode/decode attribute names for compatibility
+	if (category.itemExists("encode_attribute_names"))
+	{
+		m_encode_names = category.getValue("encode_attribute_names").compare("true") == 0 ||
+				category.getValue("encode_attribute_names").compare("True") == 0;
+	}
+
 	bool ret = this->configure();
 
 	PyGILState_Release(state);
@@ -300,6 +307,13 @@ bool Python35Filter::reconfigure(const string& newConfig)
  */
 bool Python35Filter::configure()
 {
+	// Set encode/decode attribute names for compatibility
+	if (this->getConfig().itemExists("encode_attribute_names"))
+	{
+		m_encode_names = this->getConfig().getValue("encode_attribute_names").compare("true") == 0 ||
+					this->getConfig().getValue("encode_attribute_names").compare("True") == 0;
+	}
+
 	// Import script as module
 	// NOTE:
 	// Script file name is:
@@ -338,7 +352,7 @@ bool Python35Filter::configure()
 	// check first method name is empty:
 	// disable filter, cleanup and return true
 	// This allows reconfiguration
-		if (filterMethod.empty())
+	if (filterMethod.empty())
 	{
 		// Force disable
 		this->disableFilter();

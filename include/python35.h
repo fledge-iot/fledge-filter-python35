@@ -40,6 +40,7 @@ class Python35Filter : public FledgeFilter
 			m_pModule = NULL;
 			m_pFunc = NULL;
 			m_init = false;
+			m_encode_names = true;
 		};
 
 		// Set the additional path for Python3.5 Fledge scripts
@@ -78,5 +79,7 @@ class Python35Filter : public FledgeFilter
 		std::string	m_filtersPath;
 		// Configuration lock
 		std::mutex	m_configMutex;
+		// Encode and decode attribute names for compatibility
+		bool		m_encode_names;
 };
 #endif

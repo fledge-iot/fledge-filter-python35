@@ -514,6 +514,7 @@ bool Python35Filter::setScriptName()
 			m_pythonScript =
 				this->getConfig().getItemAttribute(SCRIPT_CONFIG_ITEM_NAME,
 								   ConfigCategory::FILE_ATTR);
+			Logger::getLogger()->debug("Got script %s", m_pythonScript.c_str());
 			// Just take file name and remove path
 			std::size_t found = m_pythonScript.find_last_of("/");
 			m_pythonScript = m_pythonScript.substr(found + 1);
@@ -526,6 +527,11 @@ bool Python35Filter::setScriptName()
 		{
 			delete e;
 		}
+	}
+	else
+	{
+		Logger::getLogger()->error("There is no item named '%s' in the plugin configuration",
+				SCRIPT_CONFIG_ITEM_NAME);
 	}
 
 	if (m_pythonScript.empty())

@@ -319,6 +319,83 @@ bool Python35Filter::reconfigure(const string& newConfig)
 
 	bool ret = this->configure();
 
+	// Whole configuration as it is
+	string filterConfiguration;
+
+	// Get 'config' filter category configuration
+	if (category.itemExists("config"))
+	{
+		filterConfiguration = category.getValue("config");
+	}
+	else
+	{
+		// Set empty object
+		filterConfiguration = "{}";
+	}
+	/**
+	 * We now pass the filter JSON configuration to the loaded module
+	 */
+	PyObject* pConfigFunc = PyObject_GetAttrString(m_pModule,
+							   (char *)string(DEFAULT_FILTER_CONFIG_METHOD).c_str());
+	// Check whether "set_filter_config" method exists
+	if (PyCallable_Check(pConfigFunc))
+	{
+		// Set configuration object 
+		PyObject* pConfig = PyDict_New();
+		// Add JSON configuration, as string, to "config" key
+		PyObject* pConfigObject = PyUnicode_DecodeFSDefault(filterConfiguration.c_str());
+		PyDict_SetItemString(pConfig,
+					 "config",
+					 pConfigObject);
+		Py_CLEAR(pConfigObject);
+		/**
+		 * Call method set_filter_config(c)
+		 * This creates a global JSON configuration
+		 * which will be available when fitering data with "plugin_ingest"
+		 *
+		 * set_filter_config(config) returns 'True'
+		 */
+		//PyObject* pSetConfig = PyObject_CallMethod(pModule,
+		PyObject* pSetConfig = PyObject_CallFunctionObjArgs(pConfigFunc,
+									// arg 1
+									pConfig,
+									// end of args
+									NULL);
+
+		// Check result
+		if (!pSetConfig ||
+			!PyBool_Check(pSetConfig) ||
+			!PyLong_AsLong(pSetConfig))
+		{
+			this->logErrorMessage();
+
+			Py_CLEAR(m_pModule);
+			m_pModule = NULL;
+			Py_CLEAR(m_pFunc);
+			m_pFunc = NULL;
+			// Remove temp objects
+			Py_CLEAR(pConfig);
+			Py_CLEAR(pSetConfig);
+
+			// Remove function object
+			Py_CLEAR(pConfigFunc);
+
+			return false;
+		}
+		// Remove call object
+		Py_CLEAR(pSetConfig);
+		// Remove temp objects
+		Py_CLEAR(pConfig);
+	}
+	else
+	{
+		// Reset error if config function is not present
+		PyErr_Clear();
+	}
+
+	// Remove function object
+	Py_CLEAR(pConfigFunc);
+
 	PyGILState_Release(state);
 
 	return ret;

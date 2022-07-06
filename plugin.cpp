@@ -268,11 +268,10 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	{
 		// Errors while creating Python 3.5 filter input object
 		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "create filter data error, action: %s",
+					   "failed to create data to send to Python code",
 					   FILTER_NAME,
 					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					  "pass unfiltered data onwards");
+					   filter->m_pythonScript.c_str());
 
 		// Pass data set to next filter and return
 		filter->m_func(filter->m_data, readingSet);
@@ -293,14 +292,6 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	// - 3 - Handle filter returned data
 	if (!pReturn)
 	{
-		// Errors while getting result object
-		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "filter error, action: %s",
-					   FILTER_NAME,
-					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					   "pass unfiltered data onwards");
-
 		// Errors while getting result object
 		filter->logErrorMessage();
 

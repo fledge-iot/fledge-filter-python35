@@ -27,6 +27,13 @@ extern "C" {
 		called++;
 		*(READINGSET **)handle = readings;
 	}
+	const char *addition_script = 	"def script(readings):\n"
+        				"    for elem in list(readings):\n"
+        				"        reading = elem['reading']\n"
+				        "        sum = reading[b'a'] + reading[b'b']\n"
+				        "        reading[b'sum'] = sum\n"
+        				"    return readings\n";
+
 };
 
 TEST(PYTHON35, Addition)
@@ -39,22 +46,18 @@ TEST(PYTHON35, Addition)
 	ConfigCategory *config = new ConfigCategory("script", info->config);
 	ASSERT_NE(config, (ConfigCategory *)NULL);
 	config->setItemsValueFromDefault();
-	const char *script = "/tmp/scripts/script.py";
+	const char *script = "/tmp/scripts/test_addition_script_script.py";
 	FILE *fp = fopen(script, "w");
 	ASSERT_NE(fp, (FILE *)0);
-	fprintf(fp, "def script(readings):\n");
-	fprintf(fp, "    for elem in list(readings):\n");
-	fprintf(fp, "        reading = elem['readings']\n");
-	fprintf(fp, "        sum = reading['a'] + reading['b]\n");
-	fprintf(fp, "        reading[b'sum'] = sum\n");
-	fprintf(fp, "    return readings\n");
+	fprintf(fp, "%s", addition_script);
 	fclose(fp);
 	ASSERT_EQ(config->itemExists("script"), true);
-	config->setValue("script", script);
+	config->setValue("script", addition_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
 	ReadingSet *outReadings;
 	void *handle = plugin_init(config, &outReadings, Handler);
+	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
 
 	vector<Datapoint *> datapoints;
@@ -93,8 +96,8 @@ TEST(PYTHON35, Addition)
 		}
 		else if (outdp->getName().compare("sum") == 0)
 		{
-			ASSERT_EQ(outdp->getData().getType(), DatapointValue::T_FLOAT);
-			ASSERT_EQ(outdp->getData().toDouble(), 1050);
+			ASSERT_EQ(outdp->getData().getType(), DatapointValue::T_INTEGER);
+			ASSERT_EQ(outdp->getData().toInt(), 1050);
 		}
 		else
 		{

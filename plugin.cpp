@@ -234,9 +234,11 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 						      elem != readings.end();
 						      ++elem)
 	{
+#if 0
 		AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
 									(*elem)->getAssetName(),
 									string("Filter"));
+#endif
 	}
 	
 	/**
@@ -319,9 +321,11 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 								      elem != readings2.end();
 								      ++elem)
 			{
+#if 0
 				AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
 											(*elem)->getAssetName(),
 											string("Filter"));
+#endif
 			}
 
 			// - Remove newReadings pointer

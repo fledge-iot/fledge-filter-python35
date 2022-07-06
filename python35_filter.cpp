@@ -81,34 +81,65 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 	// Create result set
 	vector<Reading *>* newReadings = new vector<Reading *>();
 
-	// Iterate filtered data in the list
-	for (int i = 0; i < PyList_Size(filteredData); i++)
+	// Allow None to mean that no readings are returned
+	if (filteredData == Py_None)
 	{
-		// Get list item: borrowed reference.
-		PyObject* element = PyList_GetItem(filteredData, i);
-		if (!element)
-		{
-			// Failure
-			if (PyErr_Occurred())
-			{
-				this->logErrorMessage();
-			}
-			delete newReadings;
-
-			return NULL;
-		}
-
-		// Create Reading object from Python object in the list
-		Reading *reading = new PythonReading(element);
-
-		if (reading)
-		{
-			// Add the new reading to result vector
-			newReadings->push_back(reading);
-		}
+		return newReadings;
 	}
 
-	return newReadings;
+	if (PyList_Check(filteredData))
+	{
+		// Iterate filtered data in the list
+		for (int i = 0; i < PyList_Size(filteredData); i++)
+		{
+			// Get list item: borrowed reference.
+			PyObject* element = PyList_GetItem(filteredData, i);
+			if (!element)
+			{
+				// Failure
+				if (PyErr_Occurred())
+				{
+					this->logErrorMessage();
+				}
+				delete newReadings;
+
+				return NULL;
+			}
+
+			if (PyDict_Check(element))
+			{
+
+				// Create Reading object from Python object in the list
+				try {
+					Reading *reading = new PythonReading(element);
+
+					if (reading)
+					{
+						// Add the new reading to result vector
+						newReadings->push_back(reading);
+					}
+				} catch (exception &e) {
+					Logger::getLogger()->error("Badly formed reading in list returned by the Python script: %s", e.what());
+					delete newReadings;
+					return NULL;
+				}
+			}
+			else
+			{
+				Logger::getLogger()->error("Each element returned by the script must be a Python DICT");
+				delete newReadings;
+				return NULL;
+			}
+		}
+
+		return newReadings;
+	}
+	else
+	{
+		Logger::getLogger()->error("The return type of the python35 filter function should be a list of readings.");
+		return NULL;
+	}
+
 }
 
 /**
@@ -137,11 +168,8 @@ void Python35Filter::logErrorMessage()
 				    PyBytes_AsString(pyExcValueStr) :
 				    "no error description.";
 
-	Logger::getLogger()->fatal("Filter '%s', script "
-				   "'%s': Error '%s'",
-				   this->getName().c_str(),
-				   m_pythonScript.c_str(),
-				   pErrorMessage);
+	Logger::getLogger()->fatal("An error occured in the Python script: %s",
+			pErrorMessage);
 
 	// Reset error
 	PyErr_Clear();

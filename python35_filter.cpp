@@ -81,34 +81,65 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 	// Create result set
 	vector<Reading *>* newReadings = new vector<Reading *>();
 
-	// Iterate filtered data in the list
-	for (int i = 0; i < PyList_Size(filteredData); i++)
+	// Allow None to mean that no readings are returned
+	if (filteredData == Py_None)
 	{
-		// Get list item: borrowed reference.
-		PyObject* element = PyList_GetItem(filteredData, i);
-		if (!element)
-		{
-			// Failure
-			if (PyErr_Occurred())
-			{
-				this->logErrorMessage();
-			}
-			delete newReadings;
-
-			return NULL;
-		}
-
-		// Create Reading object from Python object in the list
-		Reading *reading = new PythonReading(element);
-
-		if (reading)
-		{
-			// Add the new reading to result vector
-			newReadings->push_back(reading);
-		}
+		return newReadings;
 	}
 
-	return newReadings;
+	if (PyList_Check(filteredData))
+	{
+		// Iterate filtered data in the list
+		for (int i = 0; i < PyList_Size(filteredData); i++)
+		{
+			// Get list item: borrowed reference.
+			PyObject* element = PyList_GetItem(filteredData, i);
+			if (!element)
+			{
+				// Failure
+				if (PyErr_Occurred())
+				{
+					this->logErrorMessage();
+				}
+				delete newReadings;
+
+				return NULL;
+			}
+
+			if (PyDict_Check(element))
+			{
+
+				// Create Reading object from Python object in the list
+				try {
+					Reading *reading = new PythonReading(element);
+
+					if (reading)
+					{
+						// Add the new reading to result vector
+						newReadings->push_back(reading);
+					}
+				} catch (exception &e) {
+					Logger::getLogger()->error("Badly formed reading in list returned by the Python script: %s", e.what());
+					delete newReadings;
+					return NULL;
+				}
+			}
+			else
+			{
+				Logger::getLogger()->error("Each element returned by the script must be a Python DICT");
+				delete newReadings;
+				return NULL;
+			}
+		}
+
+		return newReadings;
+	}
+	else
+	{
+		Logger::getLogger()->error("The return type of the python35 filter function should be a list of readings.");
+		return NULL;
+	}
+
 }
 
 /**
@@ -137,11 +168,8 @@ void Python35Filter::logErrorMessage()
 				    PyBytes_AsString(pyExcValueStr) :
 				    "no error description.";
 
-	Logger::getLogger()->fatal("Filter '%s', script "
-				   "'%s': Error '%s'",
-				   this->getName().c_str(),
-				   m_pythonScript.c_str(),
-				   pErrorMessage);
+	Logger::getLogger()->fatal("An error occured in the Python script: %s",
+			pErrorMessage);
 
 	// Reset error
 	PyErr_Clear();
@@ -290,6 +318,83 @@ bool Python35Filter::reconfigure(const string& newConfig)
 	}
 
 	bool ret = this->configure();
+
+	// Whole configuration as it is
+	string filterConfiguration;
+
+	// Get 'config' filter category configuration
+	if (category.itemExists("config"))
+	{
+		filterConfiguration = category.getValue("config");
+	}
+	else
+	{
+		// Set empty object
+		filterConfiguration = "{}";
+	}
+	/**
+	 * We now pass the filter JSON configuration to the loaded module
+	 */
+	PyObject* pConfigFunc = PyObject_GetAttrString(m_pModule,
+							   (char *)string(DEFAULT_FILTER_CONFIG_METHOD).c_str());
+	// Check whether "set_filter_config" method exists
+	if (PyCallable_Check(pConfigFunc))
+	{
+		// Set configuration object 
+		PyObject* pConfig = PyDict_New();
+		// Add JSON configuration, as string, to "config" key
+		PyObject* pConfigObject = PyUnicode_DecodeFSDefault(filterConfiguration.c_str());
+		PyDict_SetItemString(pConfig,
+					 "config",
+					 pConfigObject);
+		Py_CLEAR(pConfigObject);
+		/**
+		 * Call method set_filter_config(c)
+		 * This creates a global JSON configuration
+		 * which will be available when fitering data with "plugin_ingest"
+		 *
+		 * set_filter_config(config) returns 'True'
+		 */
+		//PyObject* pSetConfig = PyObject_CallMethod(pModule,
+		PyObject* pSetConfig = PyObject_CallFunctionObjArgs(pConfigFunc,
+									// arg 1
+									pConfig,
+									// end of args
+									NULL);
+
+		// Check result
+		if (!pSetConfig ||
+			!PyBool_Check(pSetConfig) ||
+			!PyLong_AsLong(pSetConfig))
+		{
+			this->logErrorMessage();
+
+			Py_CLEAR(m_pModule);
+			m_pModule = NULL;
+			Py_CLEAR(m_pFunc);
+			m_pFunc = NULL;
+			// Remove temp objects
+			Py_CLEAR(pConfig);
+			Py_CLEAR(pSetConfig);
+
+			// Remove function object
+			Py_CLEAR(pConfigFunc);
+
+			return false;
+		}
+		// Remove call object
+		Py_CLEAR(pSetConfig);
+		// Remove temp objects
+		Py_CLEAR(pConfig);
+	}
+	else
+	{
+		// Reset error if config function is not present
+		PyErr_Clear();
+	}
+
+	// Remove function object
+	Py_CLEAR(pConfigFunc);
 
 	PyGILState_Release(state);
 

@@ -62,6 +62,8 @@ It is possible to write your Python code such that it does not know the data poi
                ...
        return readings
 
+The Python script is not limited to returning the same number of readings it receives, additional readings may be added into the pipeline or readings may be removed. If the filter removes all the readings it was sent it must still return either an empty list or it may return the *None* object.
+    
 A second function may be provided by the Python plugin code to accept configuration from the plugin that can be used to modify the behavior of the Python code without the need to change the code. The configuration is a JSON document which is again passed as a Python Dict to the set_filter_config function in the user provided Python code. This function should be of the form
 
 .. code-block:: python
@@ -152,4 +154,36 @@ Examining the content of the Python, a few things to note are;
   - The function ``ema`` returns the modified readings list which then is passed to the next filter in the pipeline.
 
   - set_filter_config() is called whenever the user changes the JSON configuration in the plugin. This function will alter the global variable ``rate`` that is used within the function ``doit``.
+
+Scripting Errors
+----------------
+
+If an error occurs in the Python script details will be logged to the error log and data will not flow through the pipeline to the next filter or into the storage service. Warnings raised will not cause data to cease flowing through the pipeline.
+
+Error Messages & Warnings
+#########################
+
+Unable to obtain a reference to the asset tracker. Changes will not be tracked
+    The service is unable to obtain the required reference to the asset tracker within Fledge. Data will continue to flow through the pipeline, but there will not be ant trace of the assets that have been modified by this plugin within the pipeline.
+
+The return type of the python35 filter function should be a list of readings.
+    The python script has returned an incorrect data type. The return value of the script should be a list of readings
+
+Badly formed reading in list returned by the Python script
+    One or more of the readings in the list returned by the Python script is an incorrectly formed reading object.
+
+Each element returned by the script must be a Python DICT
+    The list returned by the Python script contains an element that is not a DICT and therefore can not be a valid reading.
+
+Badly formed reading in list returned by the Python script: Reading has no asset code element
+    One or more of the readings that is returned in the list from the script is missing the *asset_code* key. This item is the name of the asset to which the reading refers.
+
+Badly formed reading in list returned by the Python script: Reading is missing the reading element which should contain the data
+    One or more of the readings that is returned in the list from the script is missing the *reading* DICT that contains the actual data.
+
+Badly formed reading in list returned by the Python script: The reading element in the python Reading is of an incorrect type, it should be a Python DICT
+    One or more of the readings that is returned in the list from the script has an item with a key of *reading* which is not a Python Dict. This item should always be a DICT and contains the data values as key/value pairs.
+
+Badly formed reading in list returned by the Python script:  Unable to parse the asset code value. Asset codes should be a string.
+    One or more of the readings that is returned in the list from the script has an item with a key of *asset_code* whose value is not a string.
 

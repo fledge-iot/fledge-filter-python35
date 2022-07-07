@@ -204,8 +204,7 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 /**
  * Ingest a set of readings into the plugin for processing
  *
- * NOTE: in case of any error, the input readings will be passed
- * onwards (untouched)
+ * NOTE: in case of any error no data will be passed onwards in the pipeline
  *
  * @param handle	The plugin handle returned from plugin_init
  * @param readingSet	The readings to process
@@ -228,15 +227,23 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 		return;
 	}
 
+	AssetTracker *tracker = AssetTracker::getAssetTracker();
+	if (!tracker)
+	{
+		Logger::getLogger()->warn("Unable to obtian a reference to the asset tracker. Changes will not be tracked");
+	}
         // Get all the readings in the readingset
 	const vector<Reading *>& readings = ((ReadingSet *)readingSet)->getAllReadings();
 	for (vector<Reading *>::const_iterator elem = readings.begin();
 						      elem != readings.end();
 						      ++elem)
 	{
-		AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
-									(*elem)->getAssetName(),
-									string("Filter"));
+		if (tracker)
+		{
+			tracker->addAssetTrackingTuple(info->configCatName,
+							(*elem)->getAssetName(),
+							string("Filter"));
+		}
 	}
 	
 	/**
@@ -261,11 +268,10 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	{
 		// Errors while creating Python 3.5 filter input object
 		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "create filter data error, action: %s",
+					   "failed to create data to send to Python code",
 					   FILTER_NAME,
 					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					  "pass unfiltered data onwards");
+					   filter->m_pythonScript.c_str());
 
 		// Pass data set to next filter and return
 		filter->m_func(filter->m_data, readingSet);
@@ -287,18 +293,11 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 	if (!pReturn)
 	{
 		// Errors while getting result object
-		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "filter error, action: %s",
-					   FILTER_NAME,
-					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					   "pass unfiltered data onwards");
-
-		// Errors while getting result object
 		filter->logErrorMessage();
 
-		// Filter did nothing: just pass input data
-		finalData = (ReadingSet *)readingSet;
+		// Failed to get filtered data, pass on empty set of data
+		delete (ReadingSet *)readingSet;
+		finalData = new ReadingSet();
 	}
 	else
 	{
@@ -315,13 +314,16 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 			finalData = new ReadingSet(newReadings);
 
 			const vector<Reading *>& readings2 = finalData->getAllReadings();
-			for (vector<Reading *>::const_iterator elem = readings2.begin();
+			if (tracker)
+			{
+				for (vector<Reading *>::const_iterator elem = readings2.begin();
 								      elem != readings2.end();
 								      ++elem)
-			{
-				AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
-											(*elem)->getAssetName(),
-											string("Filter"));
+				{
+					tracker->addAssetTrackingTuple(info->configCatName,
+									(*elem)->getAssetName(),
+									string("Filter"));
+				}
 			}
 
 			// - Remove newReadings pointer
@@ -329,8 +331,9 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
 		}
 		else
 		{
-			// Filtered data error: use current reading set
-			finalData = (ReadingSet *)readingSet;
+			// Failed to get filtered data, pass on empty set of data
+			delete (ReadingSet *)readingSet;
+			finalData = new ReadingSet();
 		}
 
 		// Remove pReturn object

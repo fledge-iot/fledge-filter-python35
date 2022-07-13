@@ -750,11 +750,6 @@ bool Python35Filter::configure()
 			this->logErrorMessage();
 		}
 
-		m_logger->fatal("Filter %s error: cannot find Python 3.5 method "
-					   "'%s' in loaded module '%s.py'",
-					   this->getName().c_str(),
-					   filterMethod.c_str(),
-					   m_pythonScript.c_str());
 		Py_CLEAR(m_pModule);
 		m_pModule = NULL;
 		Py_CLEAR(m_pFunc);

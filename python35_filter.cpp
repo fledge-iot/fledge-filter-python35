@@ -534,6 +534,7 @@ bool Python35Filter::reconfigure(const string& newConfig)
 	}
 	else
 	{
+		m_failedScript = false;
 		// Import the new module
 
 		// Cleanup Loaded module

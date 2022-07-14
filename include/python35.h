@@ -43,6 +43,7 @@ class Python35Filter : public FledgeFilter
 			m_init = false;
 			m_encode_names = true;
 			m_logger = Logger::getLogger();
+			m_failedScript = false;
 		};
 
 		void	init();

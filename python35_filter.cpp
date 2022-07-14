@@ -665,6 +665,7 @@ bool Python35Filter::reconfigure(const string& newConfig)
  */
 bool Python35Filter::configure()
 {
+	m_failedScript = false;
 	// Set encode/decode attribute names for compatibility
 	if (this->getConfig().itemExists("encode_attribute_names"))
 	{

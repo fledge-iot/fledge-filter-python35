@@ -106,12 +106,6 @@ static PLUGIN_INFORMATION info = {
 	default_config	          // Default plugin configuration
 };
 
-typedef struct
-{
-	Python35Filter	*handle;
-	std::string	configCatName;
-} FILTER_INFO;
-
 /**
  * Return the information about this plugin
  */
@@ -140,65 +134,14 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 			  OUTPUT_HANDLE *outHandle,
 			  OUTPUT_STREAM output)
 {
-	FILTER_INFO *info = new FILTER_INFO;
-	info->handle = new Python35Filter(FILTER_NAME,
+	Python35Filter *filter = new Python35Filter(FILTER_NAME,
 						*config,
 						outHandle,
 						output);
-	info->configCatName = config->getName();
-	Python35Filter *pyFilter = info->handle;
-
-	// Embedded Python 3.5 program name
-	wchar_t *programName = Py_DecodeLocale(config->getName().c_str(), NULL);
-	Py_SetProgramName(programName);
-	PyMem_RawFree(programName);
-
-	// Embedded Python 3.5 initialisation
-	PythonRuntime::getPythonRuntime();
-
-	pyFilter->m_init = true;
-
-	PyGILState_STATE state = PyGILState_Ensure(); // acquire GIL
-
-	// Pass Fledge Data dir
-	pyFilter->setFiltersPath(getDataDir());
-
-	// Set Python path for embedded Python 3.5
-	// Get current sys.path. borrowed reference
-	PyObject* sysPath = PySys_GetObject((char *)string("path").c_str());
-	// Add Fledge python filters path
-	PyObject* pPath = PyUnicode_DecodeFSDefault((char *)pyFilter->getFiltersPath().c_str());
-	PyList_Insert(sysPath, 0, pPath);
-	// Remove temp object
-	Py_CLEAR(pPath);
-
-	// Check first we have a Python script to load
-	if (!pyFilter->setScriptName())
-	{
-		// Force disable
-		pyFilter->disableFilter();
-
-		PyGILState_Release(state);
-
-		// Return filter handle
-		return (PLUGIN_HANDLE)info;
-	}
-
-	// Configure filter
-	pyFilter->lock();
-	bool ret = pyFilter->configure();
-	pyFilter->unlock();
-
-	if (!ret &&  pyFilter->m_init)
-	{
-		// Set init failure
-		pyFilter->m_init = false;
-	}
-
-	PyGILState_Release(state); // release GIL
+	filter->init();
 
 	// return NULL aborts the filter pipeline set up
-	return ret ? (PLUGIN_HANDLE)info : NULL;
+	return (PLUGIN_HANDLE)filter;
 }
 
 /**
@@ -212,138 +155,8 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 void plugin_ingest(PLUGIN_HANDLE *handle,
 		   READINGSET *readingSet)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter *filter = info->handle;
-
-	// Protect against reconfiguration
-	filter->lock();
-	bool enabled = filter->isEnabled();
-	filter->unlock();
-
-	if (!enabled)
-	{
-		// Current filter is not active: just pass the readings set
-		filter->m_func(filter->m_data, readingSet);
-		return;
-	}
-
-	AssetTracker *tracker = AssetTracker::getAssetTracker();
-	if (!tracker)
-	{
-		Logger::getLogger()->warn("Unable to obtian a reference to the asset tracker. Changes will not be tracked");
-	}
-        // Get all the readings in the readingset
-	const vector<Reading *>& readings = ((ReadingSet *)readingSet)->getAllReadings();
-	for (vector<Reading *>::const_iterator elem = readings.begin();
-						      elem != readings.end();
-						      ++elem)
-	{
-		if (tracker)
-		{
-			tracker->addAssetTrackingTuple(info->configCatName,
-							(*elem)->getAssetName(),
-							string("Filter"));
-		}
-	}
-	
-	/**
-	 * 1 - create a Python object (list of dicts) from input data
-	 * 2 - pass Python object to Python filter method
-	 * 3 - Transform results from fealter into new ReadingSet
-	 * 4 - Remove old data and pass new data set onwards
-	 */
-	if (! Py_IsInitialized()) {
-
-		Logger::getLogger()->debug("%s - Python environment not initialized, exiting from the function ", __FUNCTION__);
-		return;
-	}
-
-	PyGILState_STATE state = PyGILState_Ensure();
-
-	// - 1 - Create Python list of dicts as input to the filter
-	PyObject* readingsList = filter->createReadingsList(readings);
-
-	// Check for errors
-	if (!readingsList)
-	{
-		// Errors while creating Python 3.5 filter input object
-		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "failed to create data to send to Python code",
-					   FILTER_NAME,
-					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str());
-
-		// Pass data set to next filter and return
-		filter->m_func(filter->m_data, readingSet);
-		PyGILState_Release(state);
-		return;
-	}
-
-	// - 2 - Call Python method passing an object
-	PyObject* pReturn = PyObject_CallFunction(filter->m_pFunc,
-						  (char *)string("O").c_str(),
-						  readingsList);
-
-	// Free filter input data
-	Py_CLEAR(readingsList);
-
-	ReadingSet* finalData = NULL;
-
-	// - 3 - Handle filter returned data
-	if (!pReturn)
-	{
-		// Errors while getting result object
-		filter->logErrorMessage();
-
-		// Failed to get filtered data, pass on empty set of data
-		delete (ReadingSet *)readingSet;
-		finalData = new ReadingSet();
-	}
-	else
-	{
-		// Get new set of readings from Python filter
-		vector<Reading *>* newReadings = filter->getFilteredReadings(pReturn);
-		if (newReadings)
-		{
-			// Filter success
-			// - Delete input data as we have a new set
-			delete (ReadingSet *)readingSet;
-			readingSet = NULL;
-
-			// - Set new readings with filtered/modified data
-			finalData = new ReadingSet(newReadings);
-
-			const vector<Reading *>& readings2 = finalData->getAllReadings();
-			if (tracker)
-			{
-				for (vector<Reading *>::const_iterator elem = readings2.begin();
-								      elem != readings2.end();
-								      ++elem)
-				{
-					tracker->addAssetTrackingTuple(info->configCatName,
-									(*elem)->getAssetName(),
-									string("Filter"));
-				}
-			}
-
-			// - Remove newReadings pointer
-			delete newReadings;
-		}
-		else
-		{
-			// Failed to get filtered data, pass on empty set of data
-			delete (ReadingSet *)readingSet;
-			finalData = new ReadingSet();
-		}
-
-		// Remove pReturn object
-		Py_CLEAR(pReturn);
-	}
-
-	PyGILState_Release(state);
-
-	// - 4 - Pass (new or old) data set to next filter
-	filter->m_func(filter->m_data, finalData);
+	Python35Filter *filter = (Python35Filter *)handle;
+	filter->ingest(readingSet);
 }
 
 /**
@@ -353,26 +166,12 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
  */
 void plugin_shutdown(PLUGIN_HANDLE *handle)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter* filter = info->handle;
+	Python35Filter* filter = (Python35Filter *)handle;
 
-	PyGILState_STATE state = PyGILState_Ensure();
-
-	// Decrement pFunc reference count
-	Py_CLEAR(filter->m_pFunc);
-		
-	// Decrement pModule reference count
-	Py_CLEAR(filter->m_pModule);
-
-	filter->m_init = false;
-
-	// Interpreter is still running, just release the GIL
-	PyGILState_Release(state);
+	filter->shutdown();
 
 	// Remove filter object
 	delete filter;
-
-	delete info;
 }
 
 /**
@@ -383,8 +182,7 @@ void plugin_shutdown(PLUGIN_HANDLE *handle)
  */
 void plugin_reconfigure(PLUGIN_HANDLE *handle, const string& newConfig)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter* filter = info->handle;
+	Python35Filter* filter = (Python35Filter *)handle;
 
 	filter->reconfigure(newConfig);
 }

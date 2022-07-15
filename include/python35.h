@@ -14,6 +14,7 @@
 
 #include <filter_plugin.h>
 #include <filter.h>
+#include <logger.h>
 
 #include <Python.h>
 
@@ -41,8 +42,13 @@ class Python35Filter : public FledgeFilter
 			m_pFunc = NULL;
 			m_init = false;
 			m_encode_names = true;
+			m_logger = Logger::getLogger();
+			m_failedScript = false;
 		};
 
+		void	init();
+		void	ingest(READINGSET *);
+		void	shutdown();
 		// Set the additional path for Python3.5 Fledge scripts
 		void	setFiltersPath(const std::string& dataDir)
 		{
@@ -63,7 +69,7 @@ class Python35Filter : public FledgeFilter
 		std::vector<Reading *>*
 			getFilteredReadings(PyObject* filteredData);
 
-	public:
+	private:
 		// Python 3.5 loaded filter module handle
 		PyObject*	m_pModule;
 		// Python 3.5 callable method handle
@@ -73,7 +79,6 @@ class Python35Filter : public FledgeFilter
 		// Python interpreter has been started by this plugin
 		bool		m_init;
 
-	private:
 		void		fixQuoting(std::string& str);
 		// Scripts path
 		std::string	m_filtersPath;
@@ -81,5 +86,8 @@ class Python35Filter : public FledgeFilter
 		std::mutex	m_configMutex;
 		// Encode and decode attribute names for compatibility
 		bool		m_encode_names;
+		bool		m_failedScript;
+		int		m_execCount;
+		Logger		*m_logger;
 };
 #endif

@@ -425,6 +425,14 @@ PyObject *ptype, *pvalue, *ptraceback;
 		}
 
 		PyErr_Clear();
+		Py_CLEAR(line_no);
+		Py_CLEAR(line_no_str);
+		Py_CLEAR(line_no_unicode);
+		Py_CLEAR(ptext);
+		Py_CLEAR(ptext_str);
+		Py_CLEAR(ptext_no_unicode);
+		Py_CLEAR(pstr);
+		Py_CLEAR(perr);
 	}
 }
 

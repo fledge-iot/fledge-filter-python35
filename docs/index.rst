@@ -90,6 +90,30 @@ A second function may be provided by the Python plugin code to accept configurat
       ...
       return True
 
+This function is called each time the configuration of the filter
+is changed. The function is responsible for taking whatever actions
+are required to change the behavior of the Python script. The most
+common approach taken with the configuration function is to record
+the configuration information in global variables for reference by the
+Python script. This however is contrary to the recommendations for writing
+Python scripts that are embedded within plugins.
+
+There is little choice but to use globals in this case, however
+precautions should be taken than minimize the risk of sharing common
+global variables between instances.
+
+  - Do not use common names or names that are not descriptive. E.g. avoid simply calling the variable *config*.
+
+  - Do not use multiple variables, there are other options that can be used.
+
+    - Use a single Python DICT as reference individuals items within the DICT
+
+    - Create a Python class and use a global instance of the class
+
+
+Adding Python35 Filters
+-----------------------
+
 Python35 filters are added in the same way as any other filters.
 
   - Click on the Applications add icon for your service or task.

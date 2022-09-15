@@ -11,8 +11,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <utils.h>
 #include <string>
 #include <iostream>
+#include <pythonreading.h>
+#include <pyruntime.h>
 
 #define PYTHON_SCRIPT_METHOD_PREFIX "_script_"
 #define PYTHON_SCRIPT_FILENAME_EXTENSION ".py"
@@ -23,6 +26,224 @@
 #include "python35.h"
 
 using namespace std;
+
+/**
+ * Python filter initialisation
+ */
+void Python35Filter::init()
+{
+	// Embedded Python 3.5 program name
+	wchar_t *programName = Py_DecodeLocale(m_name.c_str(), NULL);
+	Py_SetProgramName(programName);
+	PyMem_RawFree(programName);
+
+	// Embedded Python 3.5 initialisation
+	PythonRuntime::getPythonRuntime();
+
+	m_init = true;
+
+	PyGILState_STATE state = PyGILState_Ensure(); // acquire GIL
+
+	// Pass Fledge Data dir
+	setFiltersPath(getDataDir());
+
+	// Set Python path for embedded Python 3.5
+	// Get current sys.path. borrowed reference
+	PyObject* sysPath = PySys_GetObject((char *)string("path").c_str());
+	// Add Fledge python filters path
+	PyObject* pPath = PyUnicode_DecodeFSDefault((char *)getFiltersPath().c_str());
+	PyList_Insert(sysPath, 0, pPath);
+	// Remove temp object
+	Py_CLEAR(pPath);
+
+	// Check first we have a Python script to load
+	if (!setScriptName())
+	{
+		PyGILState_Release(state);
+		m_failedScript = true;
+		m_execCount = 0;
+		return;
+	}
+
+	// Configure filter
+	lock();
+	bool ret = configure();
+	unlock();
+
+	if (!ret &&  m_init)
+	{
+		// Set init failure
+		m_init = false;
+	}
+
+	PyGILState_Release(state); // release GIL
+
+}
+
+/**
+ * Ingest a set of readings into the Python plugin
+ *
+ * @param readingSet	The set of readings to ingest
+ */
+void Python35Filter::ingest(READINGSET *readingSet)
+{
+ReadingSet* finalData = NULL;
+
+	// Protect against reconfiguration
+	lock();
+	bool enabled = isEnabled();
+	unlock();
+
+	if (!enabled)
+	{
+		// Current filter is not active: just pass the readings set
+		m_func(m_data, readingSet);
+		return;
+	}
+
+	if (m_failedScript)
+	{
+		if (m_execCount++ > 100)
+		{
+			m_logger->warn("The %s filter plugin is unable to process data as the supplied Python script has errors.", m_name.c_str());
+			m_execCount = 0;
+		}
+		delete (ReadingSet *)readingSet;
+		return;
+	}
+
+	AssetTracker *tracker = AssetTracker::getAssetTracker();
+	if (!tracker)
+	{
+		m_logger->warn("Unable to obtian a reference to the asset tracker. Changes will not be tracked");
+	}
+        // Get all the readings in the readingset
+	const vector<Reading *>& readings = ((ReadingSet *)readingSet)->getAllReadings();
+	for (vector<Reading *>::const_iterator elem = readings.begin();
+						      elem != readings.end();
+						      ++elem)
+	{
+		if (tracker)
+		{
+			tracker->addAssetTrackingTuple(m_name,
+							(*elem)->getAssetName(),
+							string("Filter"));
+		}
+	}
+	
+	/**
+	 * 1 - create a Python object (list of dicts) from input data
+	 * 2 - pass Python object to Python filter method
+	 * 3 - Transform results from fealter into new ReadingSet
+	 * 4 - Remove old data and pass new data set onwards
+	 */
+	if (! Py_IsInitialized()) {
+
+		m_logger->fatal("The Python environment failed to  initialize, the %s filter is unable to process any data", m_name.c_str());
+		delete (ReadingSet *)readingSet;
+		return;
+	}
+
+	PyGILState_STATE state = PyGILState_Ensure();
+
+	// - 1 - Create Python list of dicts as input to the filter
+	PyObject* readingsList = createReadingsList(readings);
+
+	// Check for errors
+	if (!readingsList)
+	{
+		// Errors while creating Python 3.5 filter input object
+		m_logger->error("Internal error in the filter %s, unable to create data to be sent to the Python filter function", m_name.c_str());
+
+		PyGILState_Release(state);
+		delete (ReadingSet *)readingSet;
+		return;
+	}
+
+	// - 2 - Call Python method passing an object
+	PyObject* pReturn = PyObject_CallFunction(m_pFunc,
+						  (char *)string("O").c_str(),
+						  readingsList);
+
+	// Free filter input data
+	Py_CLEAR(readingsList);
+
+
+	// - 3 - Handle filter returned data
+	if (!pReturn)
+	{
+		// Errors while getting result object
+		logErrorMessage();
+
+		// Failed to get filtered data, pass on empty set of data
+		delete (ReadingSet *)readingSet;
+		finalData = new ReadingSet();
+	}
+	else
+	{
+		// Get new set of readings from Python filter
+		vector<Reading *>* newReadings = getFilteredReadings(pReturn);
+		if (newReadings)
+		{
+			// Filter success
+			// - Delete input data as we have a new set
+			delete (ReadingSet *)readingSet;
+			readingSet = NULL;
+
+			// - Set new readings with filtered/modified data
+			finalData = new ReadingSet(newReadings);
+
+			const vector<Reading *>& readings2 = finalData->getAllReadings();
+			if (tracker)
+			{
+				for (vector<Reading *>::const_iterator elem = readings2.begin();
+								      elem != readings2.end();
+								      ++elem)
+				{
+					tracker->addAssetTrackingTuple(m_name,
+									(*elem)->getAssetName(),
+									string("Filter"));
+				}
+			}
+
+			// - Remove newReadings pointer
+			delete newReadings;
+		}
+		else
+		{
+			// Failed to get filtered data, pass on empty set of data
+			delete (ReadingSet *)readingSet;
+			finalData = new ReadingSet();
+		}
+
+		// Remove pReturn object
+		Py_CLEAR(pReturn);
+	}
+
+	PyGILState_Release(state);
+
+	// - 4 - Pass (new or old) data set to next filter
+	m_func(m_data, finalData);
+}
+
+/**
+ * Shutdown the Python35 filter
+ */
+void Python35Filter::shutdown()
+{
+	PyGILState_STATE state = PyGILState_Ensure();
+
+	// Decrement pFunc reference count
+	Py_CLEAR(m_pFunc);
+		
+	// Decrement pModule reference count
+	Py_CLEAR(m_pModule);
+
+	m_init = false;
+
+	// Interpreter is still running, just release the GIL
+	PyGILState_Release(state);
+}
 
 /**
  * Create a Python 3.5 object (list of dicts)
@@ -37,85 +258,27 @@ PyObject* Python35Filter::createReadingsList(const vector<Reading *>& readings)
 	// TODO add checks to all PyList_XYZ methods
 	PyObject* readingsList = PyList_New(0);
 
+	PyObject *temporary_item = NULL;
+
 	// Iterate the input readings
 	for (vector<Reading *>::const_iterator elem = readings.begin();
                                                       elem != readings.end();
                                                       ++elem)
 	{
-		// Create an object (dict) with 'asset_code' and 'readings' key
-		PyObject* readingObject = PyDict_New();
+		// Create PythonReading object from readings data	
+		PythonReading *pyReading = (PythonReading *)(*elem);
 
-		// Create object (dict) for reading Datapoints:
-		// this will be added as vale for key 'readings'
-		PyObject* newDataPoints = PyDict_New();
+		// Add new PythonReading object to the output list
+		// Passing first parameter as true, sets keys to "reading" and "asset_code"
+		// Passing second parameter as strue, sets Bytes string for backwards compatibility
+		// for DICT keys and string values
 
-		// Get all datapoints
-		std::vector<Datapoint *>& dataPoints = (*elem)->getReadingData();
-		for (auto it = dataPoints.begin(); it != dataPoints.end(); ++it)
-		{
-			PyObject* value;
-			DatapointValue::dataTagType dataType = (*it)->getData().getType();
+		temporary_item = pyReading->toPython(true, m_encode_names);
 
-			if (dataType == DatapointValue::dataTagType::T_INTEGER)
-			{
-				value = PyLong_FromLong((*it)->getData().toInt());
-			}
-			else if (dataType == DatapointValue::dataTagType::T_FLOAT)
-			{
-				value = PyFloat_FromDouble((*it)->getData().toDouble());
-			}
-			else if (dataType == DatapointValue::dataTagType::T_STRING)
-			{
-				value = PyBytes_FromString((*it)->getData().toStringValue().c_str());
-			}
-			else
-			{
-				value = PyBytes_FromString((*it)->getData().toString().c_str());
-			}
+		PyList_Append(readingsList, temporary_item);
 
-			// Add Datapoint: key and value
-			PyObject* key = PyBytes_FromString((*it)->getName().c_str());
-			PyDict_SetItem(newDataPoints,
-					key,
-					value);
-			
-			Py_CLEAR(key);
-			Py_CLEAR(value);
-		}
-
-		// Add reading datapoints
-		PyDict_SetItemString(readingObject, "reading", newDataPoints);
-
-		// Add reading asset name
-		PyObject* assetVal = PyBytes_FromString((*elem)->getAssetName().c_str());
-		PyDict_SetItemString(readingObject, "asset_code", assetVal);
-
-		/**
-		 * Save id, timestamp and user_timestamp
-		 */
-
-		// Add reading id
-		PyObject* readingId = PyLong_FromUnsignedLong((*elem)->getId());
-		PyDict_SetItemString(readingObject, "id", readingId);
-
-		// Add reading timestamp
-		PyObject* readingTs = PyLong_FromUnsignedLong((*elem)->getTimestamp());
-		PyDict_SetItemString(readingObject, "ts", readingTs);
-
-		// Add reading user timestamp
-		PyObject* readingUserTs = PyLong_FromUnsignedLong((*elem)->getUserTimestamp());
-		PyDict_SetItemString(readingObject, "user_ts", readingUserTs);
-
-		// Add new object to the list
-		PyList_Append(readingsList, readingObject);
-
-		// Remove temp objects
-		Py_CLEAR(newDataPoints);
-		Py_CLEAR(assetVal);
-		Py_CLEAR(readingId);
-		Py_CLEAR(readingTs);
-		Py_CLEAR(readingUserTs);
-		Py_CLEAR(readingObject);
+		Py_DECREF(temporary_item);
+		temporary_item =  NULL;
 	}
 
 	// Return pointer of new allocated list
@@ -138,179 +301,139 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 	// Create result set
 	vector<Reading *>* newReadings = new vector<Reading *>();
 
-	// Iterate filtered data in the list
-	for (int i = 0; i < PyList_Size(filteredData); i++)
+	// Allow None to mean that no readings are returned
+	if (filteredData == Py_None)
 	{
-		// Get list item: borrowed reference.
-		PyObject* element = PyList_GetItem(filteredData, i);
-		if (!element)
+		return newReadings;
+	}
+
+	if (PyList_Check(filteredData))
+	{
+		// Iterate filtered data in the list
+		for (int i = 0; i < PyList_Size(filteredData); i++)
 		{
-			// Failure
-			if (PyErr_Occurred())
+			// Get list item: borrowed reference.
+			PyObject* element = PyList_GetItem(filteredData, i);
+			if (!element)
 			{
-				this->logErrorMessage();
-			}
-			delete newReadings;
-
-			return NULL;
-		}
-
-		// Get 'asset_code' value: borrowed reference.
-		PyObject* assetCode = PyDict_GetItemString(element,
-							   "asset_code");
-		// Get 'reading' value: borrowed reference.
-		PyObject* reading = PyDict_GetItemString(element,
-							 "reading");
-		// Keys not found or reading is not a dict
-		if (!assetCode ||
-		    !reading ||
-		    !PyDict_Check(reading))
-		{
-			// Failure
-			if (PyErr_Occurred())
-			{
-				this->logErrorMessage();
-			}
-			delete newReadings;
-
-			return NULL;
-		}
-
-		// Fetch all Datapoins in 'reading' dict			
-		PyObject *dKey, *dValue;
-		Py_ssize_t dPos = 0;
-		Reading* newReading = NULL;
-
-		// Fetch all Datapoins in 'reading' dict
-		// dKey and dValue are borrowed references
-		while (PyDict_Next(reading, &dPos, &dKey, &dValue))
-		{
-			DatapointValue* dataPoint = NULL;
-			if (PyLong_Check(dValue) || PyLong_Check(dValue))
-			{
-				dataPoint = new DatapointValue((long)PyLong_AsUnsignedLongMask(dValue));
-			}
-			else if (PyFloat_Check(dValue))
-			{
-				dataPoint = new DatapointValue(PyFloat_AS_DOUBLE(dValue));
-			}
-			else if (PyBytes_Check(dValue))
-			{
-				string value = PyBytes_AsString(dValue);
-				fixQuoting(value);
-				dataPoint = new DatapointValue(value);
-			}
-			else if (PyUnicode_Check(dValue))
-			{
-				string value = PyUnicode_AsUTF8(dValue);
-				fixQuoting(value);
-				dataPoint = new DatapointValue(value);
-			}
-			else
-			{
-				if (newReading)
+				// Failure
+				if (PyErr_Occurred())
 				{
-					delete newReading;
+					this->logErrorMessage();
 				}
+				delete newReadings;
+
 				return NULL;
 			}
 
-			// Add / Update the new Reading data			
-			if (newReading == NULL)
+			if (PyDict_Check(element))
 			{
-				newReading = new Reading(string(PyBytes_AsString(assetCode)),
-							 new Datapoint(string(PyBytes_AsString(dKey)),
-								       *dataPoint));
+
+				// Create Reading object from Python object in the list
+				try {
+					Reading *reading = new PythonReading(element);
+
+					if (reading)
+					{
+						// Add the new reading to result vector
+						newReadings->push_back(reading);
+					}
+				} catch (exception &e) {
+					m_logger->error("Badly formed reading in list returned by the Python script: %s", e.what());
+					delete newReadings;
+					return NULL;
+				}
 			}
 			else
 			{
-				newReading->addDatapoint(new Datapoint(string(PyBytes_AsString(dKey)),
-								       *dataPoint));
+				m_logger->error("Each element returned by the script must be a Python DICT");
+				delete newReadings;
+				return NULL;
 			}
-
-			/**
-			 * Set id, uuid, ts and user_ts of the original data
-			 */
-
-			// Get 'id' value: borrowed reference.
-			PyObject* id = PyDict_GetItemString(element, "id");
-			if (id && PyLong_Check(id))
-			{
-				// Set id
-				newReading->setId(PyLong_AsUnsignedLong(id));
-			}
-
-			// Get 'ts' value: borrowed reference.
-			PyObject* ts = PyDict_GetItemString(element, "ts");
-			if (ts && PyLong_Check(ts))
-			{
-				// Set timestamp
-				newReading->setTimestamp(PyLong_AsUnsignedLong(ts));
-			}
-
-			// Get 'user_ts' value: borrowed reference.
-			PyObject* uts = PyDict_GetItemString(element, "user_ts");
-			if (uts && PyLong_Check(uts))
-			{
-				// Set user timestamp
-				newReading->setUserTimestamp(PyLong_AsUnsignedLong(uts));
-			}
-
-			// Remove temp objects
-			delete dataPoint;
 		}
 
-		if (newReading)
-		{
-			// Add the new reading to result vector
-			newReadings->push_back(newReading);
-		}
+		return newReadings;
+	}
+	else
+	{
+		m_logger->error("The return type of the python35 filter function should be a list of readings.");
+		return NULL;
 	}
 
-	return newReadings;
 }
 
 /**
- * Log current Python 3.5 error message
+ * Log an error from the Python interpreter
  */
 void Python35Filter::logErrorMessage()
 {
-#ifdef PYTHON_CONSOLE_DEBUG
-	// Print full Python stacktrace 
-	PyErr_Print();
-#endif
-	//Get error message
-	PyObject *pType, *pValue, *pTraceback;
-	PyErr_Fetch(&pType, &pValue, &pTraceback);
-	PyErr_NormalizeException(&pType, &pValue, &pTraceback);
+PyObject *ptype, *pvalue, *ptraceback;
 
-	PyObject* str_exc_value = PyObject_Repr(pValue);
-	PyObject* pyExcValueStr = PyUnicode_AsEncodedString(str_exc_value, "utf-8", "Error ~");
+	if (PyErr_Occurred())
+	{
+		PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+		PyErr_NormalizeException(&ptype,&pvalue,&ptraceback);
 
-	// NOTE from :
-	// https://docs.python.org/2/c-api/exceptions.html
-	//
-	// The value and traceback object may be NULL
-	// even when the type object is not.	
-	const char* pErrorMessage = pValue ?
-				    PyBytes_AsString(pyExcValueStr) :
-				    "no error description.";
+		char *msg, *file, *text;
+		int line, offset;
 
-	Logger::getLogger()->fatal("Filter '%s', script "
-				   "'%s': Error '%s'",
-				   this->getName().c_str(),
-				   m_pythonScript.c_str(),
-				   pErrorMessage);
+		int res = PyArg_ParseTuple(pvalue,"s(siis)",&msg,&file,&line,&offset,&text);
 
-	// Reset error
-	PyErr_Clear();
+		PyObject *line_no = PyObject_GetAttrString(pvalue,"lineno");
+		PyObject *line_no_str = PyObject_Str(line_no);
+		PyObject *line_no_unicode = PyUnicode_AsEncodedString(line_no_str,"utf-8", "Error");
+		char *actual_line_no = PyBytes_AsString(line_no_unicode);  // Line number
 
-	// Remove references
-	Py_CLEAR(pType);
-	Py_CLEAR(pValue);
-	Py_CLEAR(pTraceback);
-	Py_CLEAR(str_exc_value);
-	Py_CLEAR(pyExcValueStr);
+		PyObject *ptext = PyObject_GetAttrString(pvalue,"text");
+		PyObject *ptext_str = PyObject_Str(ptext);
+		PyObject *ptext_no_unicode = PyUnicode_AsEncodedString(ptext_str,"utf-8", "Error");
+		char *error_line = PyBytes_AsString(ptext_no_unicode);  // Line in error
+
+		// Remove the trailing newline from the string
+		char *newline = rindex(error_line,  '\n');
+		if (newline)
+		{
+			*newline = '\0';
+		}
+
+		// Not managed to find a way to get the actual error message from Python
+		// so use the string representation of the Error class and tidy it up, e.g.
+		// SyntaxError('invalid syntax', ('/tmp/scripts/test_addition_script_script.py', 9, 1, '}\n'))
+		PyObject *pstr = PyObject_Repr(pvalue);
+		PyObject *perr = PyUnicode_AsEncodedString(pstr, "utf-8", "Error");
+		char *err_msg = PyBytes_AsString(perr);
+		char *end = index(err_msg, ',');
+		if (end)
+		{
+			*end = '\0';
+		}
+		end = index(err_msg, '(');
+		if (end)
+		{
+			*end = ' ';
+		}
+
+
+		if (error_line == NULL || actual_line_no == NULL || strcmp(error_line, "<NULL>") == 0
+			       	|| strcmp(actual_line_no, "<NULL>") == 0)
+		{
+			m_logger->error("Python error: %s in supplied script", err_msg);
+		}
+		else
+		{
+			m_logger->error("Python error: %s in %s at line %s of supplied script", err_msg, error_line, actual_line_no);
+		}
+
+		PyErr_Clear();
+		Py_CLEAR(line_no);
+		Py_CLEAR(line_no_str);
+		Py_CLEAR(line_no_unicode);
+		Py_CLEAR(ptext);
+		Py_CLEAR(ptext_str);
+		Py_CLEAR(ptext_no_unicode);
+		Py_CLEAR(pstr);
+		Py_CLEAR(perr);
+	}
 }
 
 /**
@@ -322,7 +445,7 @@ void Python35Filter::logErrorMessage()
  */
 bool Python35Filter::reconfigure(const string& newConfig)
 {
-	Logger::getLogger()->debug("%s filter 'plugin_reconfigure' called = %s",
+	m_logger->debug("%s filter 'plugin_reconfigure' called = %s",
 				   this->getName().c_str(),
 				   newConfig.c_str());
 
@@ -369,7 +492,7 @@ bool Python35Filter::reconfigure(const string& newConfig)
 
 	if (newScript.empty())
 	{
-		Logger::getLogger()->warn("Filter '%s', "
+		m_logger->warn("Filter '%s', "
 					  "called without a Python 3.5 script. "
 					  "Check 'script' item in '%s' configuration. "
 					  "Filter has been disabled.",
@@ -382,8 +505,10 @@ bool Python35Filter::reconfigure(const string& newConfig)
 	}
 
 	// Reload module or Import module ?
-	if (newScript.compare(m_pythonScript) == 0)
+	if (newScript.compare(m_pythonScript) == 0 && m_pModule)
 	{
+		m_failedScript = false;
+		m_execCount = 0;
 		// Reimport module
 		PyObject* newModule = PyImport_ReloadModule(m_pModule);
 		if (newModule)
@@ -403,19 +528,21 @@ bool Python35Filter::reconfigure(const string& newConfig)
 		else
 		{
 			// Errors while reloading the Python module
-			Logger::getLogger()->error("%s filter error while reloading "
+			m_logger->error("%s filter error while reloading "
 						   " Python script '%s' in 'plugin_reconfigure'",
 						   this->getName().c_str(),
 						   m_pythonScript.c_str());
 			logErrorMessage();
 
 			PyGILState_Release(state);
+			m_failedScript = true;
 
 			return false;
 		}
 	}
 	else
 	{
+		m_failedScript = false;
 		// Import the new module
 
 		// Cleanup Loaded module
@@ -441,7 +568,94 @@ bool Python35Filter::reconfigure(const string& newConfig)
 				category.getValue("enable").compare("True") == 0;
 	}
 
+	// Set encode/decode attribute names for compatibility
+	if (category.itemExists("encode_attribute_names"))
+	{
+		m_encode_names = category.getValue("encode_attribute_names").compare("true") == 0 ||
+				category.getValue("encode_attribute_names").compare("True") == 0;
+	}
+
 	bool ret = this->configure();
+
+	// Whole configuration as it is
+	string filterConfiguration;
+
+	// Get 'config' filter category configuration
+	if (category.itemExists("config"))
+	{
+		filterConfiguration = category.getValue("config");
+	}
+	else
+	{
+		// Set empty object
+		filterConfiguration = "{}";
+	}
+	/**
+	 * We now pass the filter JSON configuration to the loaded module
+	 */
+	if (m_pModule)
+	{
+		PyObject* pConfigFunc = PyObject_GetAttrString(m_pModule,
+								   (char *)string(DEFAULT_FILTER_CONFIG_METHOD).c_str());
+		// Check whether "set_filter_config" method exists
+		if (PyCallable_Check(pConfigFunc))
+		{
+			// Set configuration object 
+			PyObject* pConfig = PyDict_New();
+			// Add JSON configuration, as string, to "config" key
+			PyObject* pConfigObject = PyUnicode_DecodeFSDefault(filterConfiguration.c_str());
+			PyDict_SetItemString(pConfig,
+						 "config",
+						 pConfigObject);
+			Py_CLEAR(pConfigObject);
+			/**
+			 * Call method set_filter_config(c)
+			 * This creates a global JSON configuration
+			 * which will be available when fitering data with "plugin_ingest"
+			 *
+			 * set_filter_config(config) returns 'True'
+			 */
+			//PyObject* pSetConfig = PyObject_CallMethod(pModule,
+			PyObject* pSetConfig = PyObject_CallFunctionObjArgs(pConfigFunc,
+										// arg 1
+										pConfig,
+										// end of args
+										NULL);
+
+			// Check result
+			if (!pSetConfig ||
+				!PyBool_Check(pSetConfig) ||
+				!PyLong_AsLong(pSetConfig))
+			{
+				this->logErrorMessage();
+
+				Py_CLEAR(m_pModule);
+				m_pModule = NULL;
+				Py_CLEAR(m_pFunc);
+				m_pFunc = NULL;
+				// Remove temp objects
+				Py_CLEAR(pConfig);
+				Py_CLEAR(pSetConfig);
+
+				// Remove function object
+				Py_CLEAR(pConfigFunc);
+
+				return false;
+			}
+			// Remove call object
+			Py_CLEAR(pSetConfig);
+			// Remove temp objects
+			Py_CLEAR(pConfig);
+		}
+		else
+		{
+			// Reset error if config function is not present
+			PyErr_Clear();
+		}
+
+		// Remove function object
+		Py_CLEAR(pConfigFunc);
+	}
 
 	PyGILState_Release(state);
 
@@ -459,6 +673,14 @@ bool Python35Filter::reconfigure(const string& newConfig)
  */
 bool Python35Filter::configure()
 {
+	m_failedScript = false;
+	// Set encode/decode attribute names for compatibility
+	if (this->getConfig().itemExists("encode_attribute_names"))
+	{
+		m_encode_names = this->getConfig().getValue("encode_attribute_names").compare("true") == 0 ||
+					this->getConfig().getValue("encode_attribute_names").compare("True") == 0;
+	}
+
 	// Import script as module
 	// NOTE:
 	// Script file name is:
@@ -467,7 +689,7 @@ bool Python35Filter::configure()
 	string filterMethod;
 	std::size_t found;
 
-	Logger::getLogger()->debug("%s:%d: m_pythonScript=%s", __FUNCTION__, __LINE__, m_pythonScript.c_str());
+	m_logger->debug("%s:%d: m_pythonScript=%s", __FUNCTION__, __LINE__, m_pythonScript.c_str());
 
 	// 1) Get methodName
 	found = m_pythonScript.rfind(PYTHON_SCRIPT_METHOD_PREFIX);
@@ -488,7 +710,7 @@ bool Python35Filter::configure()
 		m_pythonScript.replace(found, strlen(PYTHON_SCRIPT_FILENAME_EXTENSION), "");
 	}
 	
-	Logger::getLogger()->debug("%s filter: script='%s', method='%s'",
+	m_logger->debug("%s filter: script='%s', method='%s'",
 				   this->getName().c_str(),
 				   m_pythonScript.c_str(),
 				   filterMethod.c_str());
@@ -497,7 +719,7 @@ bool Python35Filter::configure()
 	// check first method name is empty:
 	// disable filter, cleanup and return true
 	// This allows reconfiguration
-		if (filterMethod.empty())
+	if (filterMethod.empty())
 	{
 		// Force disable
 		this->disableFilter();
@@ -522,13 +744,8 @@ bool Python35Filter::configure()
 		{
 			this->logErrorMessage();
 		}
-		Logger::getLogger()->fatal("Filter '%s', cannot import Python 3.5 script "
-					   "'%s' from '%s'",
-					   this->getName().c_str(),
-					   m_pythonScript.c_str(),
-					   m_filtersPath.c_str());
-
 		// This will abort the filter pipeline set up
+		m_failedScript = true;
 		return false;
 	}
 
@@ -543,15 +760,12 @@ bool Python35Filter::configure()
 			this->logErrorMessage();
 		}
 
-		Logger::getLogger()->fatal("Filter %s error: cannot find Python 3.5 method "
-					   "'%s' in loaded module '%s.py'",
-					   this->getName().c_str(),
-					   filterMethod.c_str(),
-					   m_pythonScript.c_str());
 		Py_CLEAR(m_pModule);
 		m_pModule = NULL;
 		Py_CLEAR(m_pFunc);
 		m_pFunc = NULL;
+
+		m_failedScript = true;
 
 		// This will abort the filter pipeline set up
 		return false;
@@ -659,6 +873,7 @@ bool Python35Filter::setScriptName()
 			m_pythonScript =
 				this->getConfig().getItemAttribute(SCRIPT_CONFIG_ITEM_NAME,
 								   ConfigCategory::FILE_ATTR);
+			m_logger->debug("Got script %s", m_pythonScript.c_str());
 			// Just take file name and remove path
 			std::size_t found = m_pythonScript.find_last_of("/");
 			m_pythonScript = m_pythonScript.substr(found + 1);
@@ -672,11 +887,16 @@ bool Python35Filter::setScriptName()
 			delete e;
 		}
 	}
+	else
+	{
+		m_logger->error("There is no item named '%s' in the plugin configuration",
+				SCRIPT_CONFIG_ITEM_NAME);
+	}
 
 	if (m_pythonScript.empty())
 	{
 		// Do nothing
-		Logger::getLogger()->warn("Filter '%s', "
+		m_logger->warn("Filter '%s', "
 					  "called without a Python 3.5 script. "
 					  "Check 'script' item in '%s' configuration. "
 					  "Filter has been disabled.",

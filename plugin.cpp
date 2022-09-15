@@ -21,6 +21,7 @@
 #include <filter_plugin.h>
 #include <filter.h>
 #include <version.h>
+#include <pyruntime.h>
 
 #include "python35.h"
 
@@ -53,25 +54,40 @@ static void* libpython_handle = NULL;
  */
 
 // Filter default configuration
-#define DEFAULT_CONFIG "{\"plugin\" : { \"description\" : \"Python 3.5 filter plugin\", " \
-                       		"\"type\" : \"string\", " \
-				"\"readonly\": \"true\", " \
-				"\"default\" : \"" FILTER_NAME "\" }, " \
-			 "\"enable\": {\"description\": \"A switch that can be used to enable or disable execution of " \
-					 "the Python 3.5 filter.\", " \
-				"\"type\": \"boolean\", " \
-				"\"displayName\": \"Enabled\", " \
-				"\"default\": \"false\" }, " \
-			"\"config\" : {\"description\" : \"Python 3.5 filter configuration.\", " \
-				"\"type\" : \"JSON\", " \
-				"\"order\": \"2\", " \
-				"\"displayName\" : \"Configuration\", " \
-				"\"default\" : \"{}\"}, " \
-			"\"script\" : {\"description\" : \"Python 3.5 module to load.\", " \
-				"\"type\": \"script\", " \
-				"\"order\": \"1\", " \
-				"\"displayName\" : \"Python script\", " \
-				"\"default\": \"""\"} }"
+static const char *default_config = QUOTE({
+	"plugin" : {
+		"description" : "Python 3.5 filter plugin", 
+		"type" : "string", 
+		"readonly": "true",
+		"default" : FILTER_NAME
+		},
+	 "enable": {
+	 	"description": "A switch that can be used to enable or disable execution of the Python 3.5 filter.",
+		"type": "boolean",
+		"displayName": "Enabled",
+		"default": "false"
+		},
+	"config" : {
+		"description" : "Python 3.5 filter configuration.",
+		"type" : "JSON",
+		"order": "2",
+		"displayName" : "Configuration",
+		"default" : "{}"
+		},
+	"script" : {
+		"description" : "Python 3.5 module to load.",
+		"type": "script",
+		"order": "1",
+		"displayName" : "Python script",
+		"default": ""
+		},
+	"encode_attribute_names" : {
+		"description" : "Whether to encode/decode attribute names",
+		"type": "boolean",
+		"displayName": "Encode attribute names",
+		"default": "true"
+		}
+	});
 using namespace std;
 
 /**
@@ -87,14 +103,8 @@ static PLUGIN_INFORMATION info = {
         0,                        // Flags
         PLUGIN_TYPE_FILTER,       // Type
         "1.0.0",                  // Interface version
-	DEFAULT_CONFIG	          // Default plugin configuration
+	default_config	          // Default plugin configuration
 };
-
-typedef struct
-{
-	Python35Filter	*handle;
-	std::string	configCatName;
-} FILTER_INFO;
 
 /**
  * Return the information about this plugin
@@ -124,100 +134,20 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 			  OUTPUT_HANDLE *outHandle,
 			  OUTPUT_STREAM output)
 {
-	FILTER_INFO *info = new FILTER_INFO;
-	info->handle = new Python35Filter(FILTER_NAME,
+	Python35Filter *filter = new Python35Filter(FILTER_NAME,
 						*config,
 						outHandle,
 						output);
-	info->configCatName = config->getName();
-	Python35Filter *pyFilter = info->handle;
-
-	// Embedded Python 3.5 program name
-	wchar_t *programName = Py_DecodeLocale(config->getName().c_str(), NULL);
-        Py_SetProgramName(programName);
-	PyMem_RawFree(programName);
-	// Embedded Python 3.5 initialisation
-	// Check first the interpreter is already set
-	if (!Py_IsInitialized())
-	{
-#ifdef PLUGIN_PYTHON_SHARED_LIBRARY
-		string openLibrary = TO_STRING(PLUGIN_PYTHON_SHARED_LIBRARY);
-		if (!openLibrary.empty())
-		{
-			libpython_handle = dlopen(openLibrary.c_str(),
-						  RTLD_LAZY | RTLD_LOCAL);
-			Logger::getLogger()->info("Pre-loading of library '%s' "
-						  "is needed on this system",
-						  openLibrary.c_str());
-		}
-#endif
-		Py_Initialize();
-		PyThreadState* save = PyEval_SaveThread(); // release GIL
-		pyFilter->m_init = true;
-
-		Logger::getLogger()->debug("Python interpteter is being initialised by "
-					   "filter (%s), name %s",
-					   FILTER_NAME,
-					   config->getName().c_str());
-	}
-
-	PyGILState_STATE state = PyGILState_Ensure(); // acquire GIL
-
-	// Pass Fledge Data dir
-	pyFilter->setFiltersPath(getDataDir());
-
-	// Set Python path for embedded Python 3.5
-	// Get current sys.path. borrowed reference
-	PyObject* sysPath = PySys_GetObject((char *)string("path").c_str());
-	// Add Fledge python filters path
-	PyObject* pPath = PyUnicode_DecodeFSDefault((char *)pyFilter->getFiltersPath().c_str());
-	PyList_Insert(sysPath, 0, pPath);
-	// Remove temp object
-	Py_CLEAR(pPath);
-
-	// Check first we have a Python script to load
-	if (!pyFilter->setScriptName())
-	{
-		// Force disable
-		pyFilter->disableFilter();
-
-		PyGILState_Release(state);
-
-		// Return filter handle
-		return (PLUGIN_HANDLE)info;
-	}
-
-	// Configure filter
-	pyFilter->lock();
-	bool ret = pyFilter->configure();
-	pyFilter->unlock();
-
-	if (!ret)
-	{
-		// Cleanup Python 3.5
-		if (pyFilter->m_init)
-		{
-			pyFilter->m_init = false;
-			Py_Finalize();
-
-			if (libpython_handle)
-			{
-				dlclose(libpython_handle);
-			}
-		}
-	}
-
-	PyGILState_Release(state); // release GIL
+	filter->init();
 
 	// return NULL aborts the filter pipeline set up
-	return ret ? (PLUGIN_HANDLE)info : NULL;
+	return (PLUGIN_HANDLE)filter;
 }
 
 /**
  * Ingest a set of readings into the plugin for processing
  *
- * NOTE: in case of any error, the input readings will be passed
- * onwards (untouched)
+ * NOTE: in case of any error no data will be passed onwards in the pipeline
  *
  * @param handle	The plugin handle returned from plugin_init
  * @param readingSet	The readings to process
@@ -225,134 +155,8 @@ PLUGIN_HANDLE plugin_init(ConfigCategory* config,
 void plugin_ingest(PLUGIN_HANDLE *handle,
 		   READINGSET *readingSet)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter *filter = info->handle;
-
-	// Protect against reconfiguration
-	filter->lock();
-	bool enabled = filter->isEnabled();
-	filter->unlock();
-
-	if (!enabled)
-	{
-		// Current filter is not active: just pass the readings set
-		filter->m_func(filter->m_data, readingSet);
-		return;
-	}
-
-        // Get all the readings in the readingset
-	const vector<Reading *>& readings = ((ReadingSet *)readingSet)->getAllReadings();
-	for (vector<Reading *>::const_iterator elem = readings.begin();
-						      elem != readings.end();
-						      ++elem)
-	{
-		AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
-									(*elem)->getAssetName(),
-									string("Filter"));
-	}
-	
-	/**
-	 * 1 - create a Python object (list of dicts) from input data
-	 * 2 - pass Python object to Python filter method
-	 * 3 - Transform results from fealter into new ReadingSet
-	 * 4 - Remove old data and pass new data set onwards
-	 */
-	if (! Py_IsInitialized()) {
-
-		Logger::getLogger()->debug("%s - Python environment not initialized, exiting from the function ", __FUNCTION__);
-		return;
-	}
-
-	PyGILState_STATE state = PyGILState_Ensure();
-
-	// - 1 - Create Python list of dicts as input to the filter
-	PyObject* readingsList = filter->createReadingsList(readings);
-
-	// Check for errors
-	if (!readingsList)
-	{
-		// Errors while creating Python 3.5 filter input object
-		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "create filter data error, action: %s",
-					   FILTER_NAME,
-					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					  "pass unfiltered data onwards");
-
-		// Pass data set to next filter and return
-		filter->m_func(filter->m_data, readingSet);
-		PyGILState_Release(state);
-		return;
-	}
-
-	// - 2 - Call Python method passing an object
-	PyObject* pReturn = PyObject_CallFunction(filter->m_pFunc,
-						  (char *)string("O").c_str(),
-						  readingsList);
-
-	// Free filter input data
-	Py_CLEAR(readingsList);
-
-	ReadingSet* finalData = NULL;
-
-	// - 3 - Handle filter returned data
-	if (!pReturn)
-	{
-		// Errors while getting result object
-		Logger::getLogger()->error("Filter '%s' (%s), script '%s', "
-					   "filter error, action: %s",
-					   FILTER_NAME,
-					   filter->getConfig().getName().c_str(),
-					   filter->m_pythonScript.c_str(),
-					   "pass unfiltered data onwards");
-
-		// Errors while getting result object
-		filter->logErrorMessage();
-
-		// Filter did nothing: just pass input data
-		finalData = (ReadingSet *)readingSet;
-	}
-	else
-	{
-		// Get new set of readings from Python filter
-		vector<Reading *>* newReadings = filter->getFilteredReadings(pReturn);
-		if (newReadings)
-		{
-			// Filter success
-			// - Delete input data as we have a new set
-			delete (ReadingSet *)readingSet;
-			readingSet = NULL;
-
-			// - Set new readings with filtered/modified data
-			finalData = new ReadingSet(newReadings);
-
-			const vector<Reading *>& readings2 = finalData->getAllReadings();
-			for (vector<Reading *>::const_iterator elem = readings2.begin();
-								      elem != readings2.end();
-								      ++elem)
-			{
-				AssetTracker::getAssetTracker()->addAssetTrackingTuple(info->configCatName,
-											(*elem)->getAssetName(),
-											string("Filter"));
-			}
-
-			// - Remove newReadings pointer
-			delete newReadings;
-		}
-		else
-		{
-			// Filtered data error: use current reading set
-			finalData = (ReadingSet *)readingSet;
-		}
-
-		// Remove pReturn object
-		Py_CLEAR(pReturn);
-	}
-
-	PyGILState_Release(state);
-
-	// - 4 - Pass (new or old) data set to next filter
-	filter->m_func(filter->m_data, finalData);
+	Python35Filter *filter = (Python35Filter *)handle;
+	filter->ingest(readingSet);
 }
 
 /**
@@ -362,37 +166,12 @@ void plugin_ingest(PLUGIN_HANDLE *handle,
  */
 void plugin_shutdown(PLUGIN_HANDLE *handle)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter* filter = info->handle;
+	Python35Filter* filter = (Python35Filter *)handle;
 
-	// Cleanup Python 3.5
-	if (filter->m_init)
-	{
-		filter->m_init = false;
+	filter->shutdown();
 
-		if (Py_IsInitialized()) {
-
-			PyGILState_STATE state = PyGILState_Ensure();
-
-			// Decrement pFunc reference count
-			Py_CLEAR(filter->m_pFunc);
-
-			// Decrement pModule reference count
-			Py_CLEAR(filter->m_pModule);
-
-
-			Py_Finalize();
-		}
-
-		if (libpython_handle)
-		{
-			dlclose(libpython_handle);
-		}
-	}
 	// Remove filter object
 	delete filter;
-
-	delete info;
 }
 
 /**
@@ -403,8 +182,7 @@ void plugin_shutdown(PLUGIN_HANDLE *handle)
  */
 void plugin_reconfigure(PLUGIN_HANDLE *handle, const string& newConfig)
 {
-	FILTER_INFO *info = (FILTER_INFO *) handle;
-	Python35Filter* filter = info->handle;
+	Python35Filter* filter = (Python35Filter *)handle;
 
 	filter->reconfigure(newConfig);
 }

@@ -38,7 +38,7 @@ timestamps {
                         ./requirements.sh
                     fi
                     export FLEDGE_ROOT=/home/ubuntu/fledge
-                    cd tests && make && ./RunTests
+                    cd tests && cmake . && make && ./RunTests
                 '''
                 } catch (e) {
                     currentBuild.result = 'FAILURE'

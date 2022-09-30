@@ -5,9 +5,9 @@ timestamps {
                 try {
                 sh '''
                 echo $(pwd)
-                if [[ -d ./tests ]]
+                if [ -d ./tests ]
                 then
-                    if [[ -d /home/ubuntu/fledge ]]; 
+                    if [ -d /home/ubuntu/fledge ]
                     then 
                         cd /hom/ubuntu/fledge && old_sha=$(git rev-parse --short HEAD) && git pull  && new_sha=$(git rev-parse --short HEAD)
                         if [[ ${old_sha} != ${new_sha} ]];
@@ -25,6 +25,7 @@ timestamps {
                 '''
                 } catch (e) {
                     currentBuild.result = 'FAILURE'
+                    return
                 }
             }
             checkout scm
@@ -32,7 +33,7 @@ timestamps {
                 echo "Running tests..."
                 try {
                 sh '''
-                    if [[ -f requirements.sh ]]
+                    if [ -f requirements.sh ]
                     then
                         ./requirements.sh
                     fi
@@ -41,6 +42,7 @@ timestamps {
                 '''
                 } catch (e) {
                     currentBuild.result = 'FAILURE'
+                    return
                 }
                 echo "Tests completed."
             }

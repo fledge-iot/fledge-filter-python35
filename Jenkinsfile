@@ -8,7 +8,7 @@ timestamps {
                 if [ -d /home/ubuntu/fledge ]
                 then 
                     cd /hom/ubuntu/fledge && old_sha=$(git rev-parse --short HEAD) && git pull  && new_sha=$(git rev-parse --short HEAD)
-                    if [[ ${old_sha} != ${new_sha} ]];
+                    if [ ${old_sha} != ${new_sha} ]
                     then
                     sudo ./requirements.sh && make
                     fi

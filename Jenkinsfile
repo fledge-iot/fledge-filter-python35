@@ -2,33 +2,33 @@ timestamps {
     node("ubuntu18-agent") {
         catchError {
             checkout scm
-            dir_exist= sh (
+            dir_exists = sh (
 		        script: "test -d 'tests' && echo 'Y' || echo 'N' ",
                 returnStdout: true
             ).trim()
 
-            if (dir_exist == 'N'){
+            if (dir_exists == 'N'){
                 currentBuild.result= 'FAILURE'
                 echo "No tests directory found! Exiting."
                 return
             }
-            // Set BRANCH to specific branch of fledge repo, in case you want to run the tests against specific code
-            // e.g. FOGL-xxxx, main etc.
             try {
                 stage("Prerequisites"){
+                    // Change to corresponding CORE_BRANCH as required
+                    // e.g. FOGL-xxxx, main etc.
                     sh '''
-                        BRANCH='develop'
-                        ${HOME}/buildFledge.sh ${BRANCH} ${WORKSPACE}
+                        CORE_BRANCH='develop'
+                        ${HOME}/buildFledge ${CORE_BRANCH} ${WORKSPACE}
                     '''
                 }
             } catch (e) {
-                currentBuild.result = 'SUCCESS'
-                echo "Failed to build Fledge; required to run the tests."
+                currentBuild.result = 'FAILURE'
+                echo "Failed to build Fledge; required to run the tests!"
                 return
             }   
 
             try { 
-                stage("Run tests"){
+                stage("Run Tests"){
                     echo "Executing tests..."
                     sh '''
                         export FLEDGE_ROOT=$HOME/fledge
@@ -37,14 +37,13 @@ timestamps {
                     echo "Done."
                 }
             } catch (e) {
-                result = "TEST FAILED" 
+                result = "TESTS FAILED" 
                 currentBuild.result = 'FAILURE'
-                echo "Tests failed."
+                echo "Tests failed!"
             }
 
             try {
-                stage("Publish Report"){
-                    echo "Archiving XML Repport"
+                stage("Publish Test Report"){
                     junit "tests/test_output.xml"
                 }
             } catch (e) {

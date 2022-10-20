@@ -59,6 +59,7 @@ class Python35Filter : public FledgeFilter
 			getFiltersPath() const { return m_filtersPath; };
 		bool	setScriptName();
 		bool	configure();
+		bool	initSuccess() { return m_init; }
 		bool	reconfigure(const std::string& newConfig);
 		void	lock() { m_configMutex.lock(); };
 		void	unlock() { m_configMutex.unlock(); };

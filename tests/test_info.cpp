@@ -15,7 +15,7 @@ TEST(EXPRESSION_INFO, PluginInfo)
 {
 	PLUGIN_INFORMATION *info = plugin_info();
 	ASSERT_STREQ(info->name, "python35");
-	ASSERT_EQ(info->type, PLUGIN_TYPE_FILTER);
+	ASSERT_STREQ(info->type, PLUGIN_TYPE_FILTER);
 }
 
 TEST(EXPRESSION_INFO, PluginInfoConfigParse)

@@ -9,6 +9,7 @@
 #include <rapidjson/document.h>
 #include <reading.h>
 #include <reading_set.h>
+#include <python35.h>
 
 using namespace std;
 using namespace rapidjson;
@@ -291,7 +292,9 @@ TEST(PYTHON35, IndentError)
 	config->setValue("enable", "true");
 	ReadingSet *outReadings;
 	void *handle = plugin_init(config, &outReadings, Handler);
-	ASSERT_EQ(handle, (void *)NULL);
+	Python35Filter *hndl = (Python35Filter *) handle;
+	// handle is valid but it has not been configured/init properly/completely because of indent error in python script
+	ASSERT_FALSE(hndl && hndl->initSuccess());
 }
 
 #if 0

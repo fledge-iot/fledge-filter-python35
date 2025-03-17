@@ -357,6 +357,7 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 	else
 	{
 		m_logger->error("The return type of the python35 filter function should be a list of readings.");
+		delete newReadings;
 		return NULL;
 	}
 

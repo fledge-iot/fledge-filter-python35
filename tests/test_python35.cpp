@@ -71,6 +71,7 @@ extern "C" {
 			  OUTPUT_HANDLE *outHandle,
 			  OUTPUT_STREAM output);
 	void plugin_reconfigure(void *handle, const string& newConfig);
+	void plugin_shutdown(PLUGIN_HANDLE handle);
 	int called = 0;
 
 	void Handler(void *handle, READINGSET *readings)
@@ -114,6 +115,7 @@ TEST(PYTHON35, Addition)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
@@ -147,6 +149,11 @@ TEST(PYTHON35, Addition)
 			ASSERT_STREQ(outdp->getName().c_str(), "result");
 		}
 	}
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, None)
@@ -183,11 +190,17 @@ TEST(PYTHON35, None)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, BadReading)
@@ -224,11 +237,17 @@ TEST(PYTHON35, BadReading)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, WrongType)
@@ -265,11 +284,17 @@ TEST(PYTHON35, WrongType)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, IndentError)
@@ -295,6 +320,11 @@ TEST(PYTHON35, IndentError)
 	Python35Filter *hndl = (Python35Filter *) handle;
 	// handle is valid but it has not been configured/init properly/completely because of indent error in python script
 	ASSERT_FALSE(hndl && hndl->initSuccess());
+
+	// Cleanup
+	delete config;
+	delete outReadings;;
+	plugin_shutdown(handle);
 }
 
 #if 0
@@ -340,6 +370,7 @@ TEST(PYTHON35, ReconfigScript)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
@@ -395,6 +426,7 @@ TEST(PYTHON35, ReconfigScript)
 
 
 	ReadingSet *readingSet2 = new ReadingSet(readings2);
+	delete readings2;
 	plugin_ingest(handle, (READINGSET *)readingSet2);
 
 	results = outReadings->getAllReadings();
@@ -418,6 +450,11 @@ TEST(PYTHON35, ReconfigScript)
 			ASSERT_EQ(outdp->getData().toInt(), 50);
 		}
 	}
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 #endif
 };

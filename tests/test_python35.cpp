@@ -323,7 +323,6 @@ TEST(PYTHON35, IndentError)
 
 	// Cleanup
 	delete config;
-	delete outReadings;;
 	plugin_shutdown(handle);
 }
 

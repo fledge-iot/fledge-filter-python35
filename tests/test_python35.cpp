@@ -99,7 +99,7 @@ TEST(PYTHON35, Addition)
 	config->setValue("script", addition_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -174,7 +174,7 @@ TEST(PYTHON35, None)
 	config->setValue("script", none_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -221,7 +221,7 @@ TEST(PYTHON35, BadReading)
 	config->setValue("script", bad_reading_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -268,7 +268,7 @@ TEST(PYTHON35, WrongType)
 	config->setValue("script", wrong_type_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -315,7 +315,7 @@ TEST(PYTHON35, IndentError)
 	config->setValue("script", indent_error_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	Python35Filter *hndl = (Python35Filter *) handle;
 	// handle is valid but it has not been configured/init properly/completely because of indent error in python script
@@ -323,13 +323,13 @@ TEST(PYTHON35, IndentError)
 
 	// Cleanup
 	delete config;
-	delete outReadings;;
+	delete outReadings;
 	plugin_shutdown(handle);
 }
 
 #if 0
-Currently this can not be run because of an issue with gettign a string
-variabnt of the configuration category. This is not a plugin issue and needs
+Currently this can not be run because of an issue with getting a string
+variant of the configuration category. This is not a plugin issue and needs
 to be resolved elsewhere
 
 TEST(PYTHON35, ReconfigScript)

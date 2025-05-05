@@ -38,7 +38,7 @@ timestamps {
                             curl -sSL -o valgrind-python.supp https://raw.githubusercontent.com/python/cpython/main/Misc/valgrind-python.supp
                         fi
                         cd tests && cmake . && make -j$(nproc) && \
-                        valgrind -v --leak-check=full --suppressions=valgrind-python.supp ./RunTests --gtest_output=xml:test_output.xml 2>&1 | tee valgrind_report.log
+                        valgrind -v --leak-check=full --suppressions=tests/valgrind-python.supp ./RunTests --gtest_output=xml:test_output.xml 2>&1 | tee valgrind_report.log
                     '''
                     def leakDetected = sh(
                         script: "grep -q '^==[0-9]*==    definitely lost: [1-9][0-9,]* bytes' tests/valgrind_report.log && echo Y || echo N",

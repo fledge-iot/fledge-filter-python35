@@ -159,65 +159,241 @@
    fun:_dl_allocate_tls
 }
 
-###{
-###   ADDRESS_IN_RANGE/Invalid read of size 4
-###   Memcheck:Addr4
-###   fun:_PyObject_Free
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Invalid read of size 4
-###   Memcheck:Value4
-###   fun:_PyObject_Free
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
-###   Memcheck:Addr8
-###   fun:_PyObject_Free
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
-###   Memcheck:Value8
-###   fun:_PyObject_Free
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Conditional jump or move depends on uninitialised value
-###   Memcheck:Cond
-###   fun:_PyObject_Free
-###}
+{
+   ADDRESS_IN_RANGE/Invalid read of size 4
+   Memcheck:Addr4
+   fun:_PyObject_Free
+}
 
-###{
-###   ADDRESS_IN_RANGE/Invalid read of size 4
-###   Memcheck:Addr4
-###   fun:_PyObject_Realloc
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Invalid read of size 4
-###   Memcheck:Value4
-###   fun:_PyObject_Realloc
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
-###   Memcheck:Addr8
-###   fun:_PyObject_Realloc
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
-###   Memcheck:Value8
-###   fun:_PyObject_Realloc
-###}
-###
-###{
-###   ADDRESS_IN_RANGE/Conditional jump or move depends on uninitialised value
-###   Memcheck:Cond
-###   fun:_PyObject_Realloc
-###}
+{
+   ADDRESS_IN_RANGE/Invalid read of size 4
+   Memcheck:Value4
+   fun:_PyObject_Free
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyEval_EvalCodeWithName
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyEval_EvalCodeWithName
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyEval_EvalCodeWithName
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyEval_EvalCodeWithName
+   fun:_PyFunction_FastCallDict
+   fun:_PyObject_FastCallDict
+   fun:_PyObject_CallMethodIdObjArgs
+   fun:PyImport_ImportModuleLevelObject
+   fun:UnknownInlinedFun
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyEval_EvalCodeWithName
+   fun:PyEval_EvalCodeEx
+   fun:PyEval_EvalCode
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyEval_EvalCodeWithName
+   fun:PyEval_EvalCodeEx
+   fun:PyEval_EvalCode
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyFunction_FastCall
+   fun:_PyFunction_FastCallDict
+   fun:_PyObject_FastCallDict
+   fun:_PyObject_CallMethodIdObjArgs
+   fun:PyImport_ImportModuleLevelObject
+   fun:UnknownInlinedFun
+   fun:_PyEval_EvalFrameDefault
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:realloc
+   fun:_PyObject_GC_Resize
+   fun:PyFrame_New
+   fun:_PyFunction_FastCall
+   fun:UnknownInlinedFun
+   fun:call_function.lto_priv.2043
+   fun:_PyEval_EvalFrameDefault
+   fun:_PyEval_EvalCodeWithName
+   fun:PyEval_EvalCodeEx
+   fun:PyEval_EvalCode
+   fun:UnknownInlinedFun
+   fun:builtin_exec
+   fun:PyCFunction_Call
+   fun:UnknownInlinedFun
+   fun:_PyEval_EvalFrameDefault
+}
+
+# Suppressions for Python garbage collection
+{
+   Python-GC-Leak
+   Memcheck:Leak
+   fun:_PyObject_GC_Malloc
+   fun:_PyObject_GC_NewVar
+   fun:PyFrame_New
+}
+
+# Suppressions for Python eval loop
+{
+   Python-Eval-Leak
+   Memcheck:Leak
+   fun:_PyEval_EvalFrameDefault
+   fun:PyEval_EvalCodeEx
+   fun:PyEval_EvalCode
+}
+
+# Suppressions for Python's internal malloc
+{
+   Python-Internal-Malloc
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/x86_64-linux-gnu/libpython3.6m.so.1.0
+}
+
+{
+   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
+   Memcheck:Addr8
+   fun:_PyObject_Free
+}
+
+{
+   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
+   Memcheck:Value8
+   fun:_PyObject_Free
+}
+
+{
+   ADDRESS_IN_RANGE/Conditional jump or move depends on uninitialised value
+   Memcheck:Cond
+   fun:_PyObject_Free
+}
+
+{
+   ADDRESS_IN_RANGE/Invalid read of size 4
+   Memcheck:Addr4
+   fun:_PyObject_Realloc
+}
+
+{
+   ADDRESS_IN_RANGE/Invalid read of size 4
+   Memcheck:Value4
+   fun:_PyObject_Realloc
+}
+
+{
+   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
+   Memcheck:Addr8
+   fun:_PyObject_Realloc
+}
+
+{
+   ADDRESS_IN_RANGE/Use of uninitialised value of size 8
+   Memcheck:Value8
+   fun:_PyObject_Realloc
+}
+
+{
+   ADDRESS_IN_RANGE/Conditional jump or move depends on uninitialised value
+   Memcheck:Cond
+   fun:_PyObject_Realloc
+}
+
+{
+    Python-Frame-Leak
+    Memcheck:Leak
+    fun:_PyObject_GC_Malloc
+    fun:PyFrame_New
+}
 
 ###
 ### All the suppressions below are for errors that occur within libraries
@@ -531,4 +707,3 @@
    Memcheck:Addr4
    fun:PyUnicode_FSConverter
 }
-

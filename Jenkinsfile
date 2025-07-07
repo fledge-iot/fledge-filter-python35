@@ -1,5 +1,5 @@
 timestamps {
-    node("ubuntu18-agent") {
+    node("ubuntu-agent") {
         def IS_MEMORY_LEAKAGE = 'FALSE'
         catchError {
             checkout scm
@@ -34,7 +34,7 @@ timestamps {
                     sh '''
                         export FLEDGE_ROOT=$HOME/fledge
                         cd tests && cmake . && make -j$(nproc) && \
-                        valgrind -v --leak-check=full --suppressions=valgrind-python.supp ./RunTests --gtest_output=xml:test_output.xml 2>&1 | tee valgrind_report.log
+                        valgrind -v --leak-check=full ./RunTests --gtest_output=xml:test_output.xml 2>&1 | tee valgrind_report.log
                     '''
                     def leakDetected = sh(
                         script: "grep -q '^==[0-9]*==    definitely lost: [1-9][0-9,]* bytes' tests/valgrind_report.log && echo Y || echo N",

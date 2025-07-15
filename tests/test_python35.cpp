@@ -71,6 +71,7 @@ extern "C" {
 			  OUTPUT_HANDLE *outHandle,
 			  OUTPUT_STREAM output);
 	void plugin_reconfigure(void *handle, const string& newConfig);
+	void plugin_shutdown(PLUGIN_HANDLE handle);
 	int called = 0;
 
 	void Handler(void *handle, READINGSET *readings)
@@ -98,7 +99,7 @@ TEST(PYTHON35, Addition)
 	config->setValue("script", addition_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -114,6 +115,7 @@ TEST(PYTHON35, Addition)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
@@ -147,6 +149,11 @@ TEST(PYTHON35, Addition)
 			ASSERT_STREQ(outdp->getName().c_str(), "result");
 		}
 	}
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, None)
@@ -167,7 +174,7 @@ TEST(PYTHON35, None)
 	config->setValue("script", none_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -183,11 +190,17 @@ TEST(PYTHON35, None)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, BadReading)
@@ -208,7 +221,7 @@ TEST(PYTHON35, BadReading)
 	config->setValue("script", bad_reading_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -224,11 +237,17 @@ TEST(PYTHON35, BadReading)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, WrongType)
@@ -249,7 +268,7 @@ TEST(PYTHON35, WrongType)
 	config->setValue("script", wrong_type_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	ASSERT_NE(handle, (void *)NULL);
 	vector<Reading *> *readings = new vector<Reading *>;
@@ -265,11 +284,17 @@ TEST(PYTHON35, WrongType)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
 	vector<Reading *>results = outReadings->getAllReadings();
 	ASSERT_EQ(results.size(), 0);
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 TEST(PYTHON35, IndentError)
@@ -290,16 +315,21 @@ TEST(PYTHON35, IndentError)
 	config->setValue("script", indent_error_script);
 	config->setItemAttribute("script", ConfigCategory::FILE_ATTR, script);
 	config->setValue("enable", "true");
-	ReadingSet *outReadings;
+	ReadingSet *outReadings = NULL;
 	void *handle = plugin_init(config, &outReadings, Handler);
 	Python35Filter *hndl = (Python35Filter *) handle;
 	// handle is valid but it has not been configured/init properly/completely because of indent error in python script
 	ASSERT_FALSE(hndl && hndl->initSuccess());
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 
 #if 0
-Currently this can not be run because of an issue with gettign a string
-variabnt of the configuration category. This is not a plugin issue and needs
+Currently this can not be run because of an issue with getting a string
+variant of the configuration category. This is not a plugin issue and needs
 to be resolved elsewhere
 
 TEST(PYTHON35, ReconfigScript)
@@ -340,6 +370,7 @@ TEST(PYTHON35, ReconfigScript)
 
 
 	ReadingSet *readingSet = new ReadingSet(readings);
+	delete readings;
 	plugin_ingest(handle, (READINGSET *)readingSet);
 
 
@@ -395,6 +426,7 @@ TEST(PYTHON35, ReconfigScript)
 
 
 	ReadingSet *readingSet2 = new ReadingSet(readings2);
+	delete readings2;
 	plugin_ingest(handle, (READINGSET *)readingSet2);
 
 	results = outReadings->getAllReadings();
@@ -418,6 +450,11 @@ TEST(PYTHON35, ReconfigScript)
 			ASSERT_EQ(outdp->getData().toInt(), 50);
 		}
 	}
+
+	// Cleanup
+	delete config;
+	delete outReadings;
+	plugin_shutdown(handle);
 }
 #endif
 };

@@ -1,8 +1,5 @@
 timestamps {
     node("ubuntu-agent") {
-        echo "Currently, we are skipping tests due to unresolved memory leaks. Once the issues are addressed in JIRA FOGL-10023, we should reinstate the tests."
-        return
-
         def IS_MEMORY_LEAKAGE = 'FALSE'
         catchError {
             checkout scm

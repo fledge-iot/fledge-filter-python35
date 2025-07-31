@@ -707,3 +707,78 @@
    Memcheck:Addr4
    fun:PyUnicode_FSConverter
 }
+
+#
+# NumPy-specific suppressions for memory leaks in random number generation
+#
+
+{
+   NumPy random number generator memory leak - specific stack trace
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/core/_multiarray_umath.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/x86_64-linux-gnu/libpython3.8.so.1.0
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/x86_64-linux-gnu/libpython3.8.so.1.0
+   fun:malloc
+   obj:/usr/lib/x86_64-linux-gnu/libpython3.8.so.1.0
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/mt19937.cpython-38-x86_64-linux-gnu.so
+}
+
+{
+   NumPy random number generator memory leak - general
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/core/_multiarray_umath.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+}
+
+{
+   NumPy MT19937 random number generator memory leak
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/mt19937.cpython-38-x86_64-linux-gnu.so
+}
+
+{
+   NumPy random bit generator memory leak
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+}
+
+{
+   NumPy random number generator cleanup suppression
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/bit_generator.cpython-38-x86_64-linux-gnu.so
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/mt19937.cpython-38-x86_64-linux-gnu.so
+}
+
+{
+   NumPy random number generator - any malloc in numpy random modules
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/random/*.so
+}
+
+{
+   NumPy core memory leak
+   Memcheck:Leak
+   fun:malloc
+   obj:/usr/lib/python3/dist-packages/numpy/core/*.so
+}

@@ -24,6 +24,7 @@
 #define DEFAULT_FILTER_CONFIG_METHOD "set_filter_config"
 
 #include "python35.h"
+#include "script_sandbox.h"
 
 using namespace std;
 
@@ -239,6 +240,9 @@ void Python35Filter::shutdown()
 	// Decrement pModule reference count
 	Py_CLEAR(m_pModule);
 
+	// Decrement sandbox loader reference count
+	Py_CLEAR(m_sandbox);
+
 	m_init = false;
 
 	// Interpreter is still running, just release the GIL
@@ -364,6 +368,76 @@ vector<Reading *>* Python35Filter::getFilteredReadings(PyObject* filteredData)
 }
 
 /**
+ * Load a user supplied script as a module in a restricted environment.
+ *
+ * The script source is checked (AST import check) and run with restricted
+ * builtins, see script_sandbox.h. Replaces PyImport_ImportModule, which would
+ * run the script with no restrictions at all.
+ *
+ * The GIL must be held by the caller.
+ *
+ * @param scriptName	Script module name, without path or .py extension
+ * @return		New reference to the module or NULL with the Python
+ *			error indicator set
+ */
+PyObject* Python35Filter::loadScript(const string& scriptName)
+{
+	if (!m_sandbox)
+	{
+		PyObject* ns = PyDict_New();
+		PyObject* res = PyRun_String(SCRIPT_SANDBOX_SOURCE, Py_file_input, ns, ns);
+		if (!res)
+		{
+			Py_CLEAR(ns);
+			return NULL;
+		}
+		Py_CLEAR(res);
+		m_sandbox = PyDict_GetItemString(ns, SCRIPT_SANDBOX_LOADER_FUNCTION);
+		Py_XINCREF(m_sandbox);
+		Py_CLEAR(ns);
+		if (!m_sandbox)
+		{
+			PyErr_SetString(PyExc_RuntimeError, "Script sandbox loader is not available");
+			return NULL;
+		}
+	}
+
+	// The script name must be a plain file name: no path components
+	if (scriptName.empty() || scriptName.find('/') != string::npos ||
+	    scriptName.find("..") != string::npos)
+	{
+		PyErr_SetString(PyExc_ImportError, "Invalid filter script name");
+		return NULL;
+	}
+	string path = m_filtersPath + "/" + scriptName + PYTHON_SCRIPT_FILENAME_EXTENSION;
+	// Additional modules, set by the operator in the Fledge environment
+	const char *extra = getenv(SCRIPT_SANDBOX_EXTRA_IMPORTS_ENV);
+	return PyObject_CallFunction(m_sandbox, (char *)"sss", path.c_str(), scriptName.c_str(),
+				     extra ? extra : "");
+}
+
+/**
+ * Return the UTF-8 string value of a Python object. The reference is borrowed.
+ * Returns an empty string if the object is NULL or can not be converted.
+ */
+static std::string pyString(PyObject *obj)
+{
+	std::string result;
+	if (obj)
+	{
+		PyObject *str = PyObject_Str(obj);
+		const char *utf8 = str ? PyUnicode_AsUTF8(str) : NULL;
+		if (utf8)
+		{
+			result = utf8;
+		}
+		Py_XDECREF(str);
+	}
+	PyErr_Clear();
+	return result;
+}
+
+/**
  * Log an error from the Python interpreter
  */
 void Python35Filter::logErrorMessage()
@@ -375,65 +449,79 @@ PyObject *ptype, *pvalue, *ptraceback;
 		PyErr_Fetch(&ptype, &pvalue, &ptraceback);
 		PyErr_NormalizeException(&ptype,&pvalue,&ptraceback);
 
-		char *msg, *file, *text;
-		int line, offset;
-
-		int res = PyArg_ParseTuple(pvalue,"s(siis)",&msg,&file,&line,&offset,&text);
-
-		PyObject *line_no = PyObject_GetAttrString(pvalue,"lineno");
-		PyObject *line_no_str = PyObject_Str(line_no);
-		PyObject *line_no_unicode = PyUnicode_AsEncodedString(line_no_str,"utf-8", "Error");
-		char *actual_line_no = PyBytes_AsString(line_no_unicode);  // Line number
-
-		PyObject *ptext = PyObject_GetAttrString(pvalue,"text");
-		PyObject *ptext_str = PyObject_Str(ptext);
-		PyObject *ptext_no_unicode = PyUnicode_AsEncodedString(ptext_str,"utf-8", "Error");
-		char *error_line = PyBytes_AsString(ptext_no_unicode);  // Line in error
-
-		// Remove the trailing newline from the string
-		char *newline = rindex(error_line,  '\n');
-		if (newline)
+		// Import errors, including scripts rejected by the sandbox, carry
+		// a self explanatory message
+		if (PyErr_GivenExceptionMatches(ptype, PyExc_ImportError))
 		{
-			*newline = '\0';
+			std::string imsg = pyString(pvalue);
+			m_logger->error("Python script rejected or failed to load: %s",
+					imsg.empty() ? "unknown import error" : imsg.c_str());
+			Py_XDECREF(ptype);
+			Py_XDECREF(pvalue);
+			Py_XDECREF(ptraceback);
+			return;
 		}
 
-		// Not managed to find a way to get the actual error message from Python
-		// so use the string representation of the Error class and tidy it up, e.g.
-		// SyntaxError('invalid syntax', ('/tmp/scripts/test_addition_script_script.py', 9, 1, '}\n'))
-		PyObject *pstr = PyObject_Repr(pvalue);
-		PyObject *perr = PyUnicode_AsEncodedString(pstr, "utf-8", "Error");
-		char *err_msg = PyBytes_AsString(perr);
-		char *end = index(err_msg, ',');
-		if (end)
+		// Error type and message, e.g. IndentationError: expected an indented block
+		std::string errType;
+		PyObject *ptypeName = ptype ? PyObject_GetAttrString(ptype, "__name__") : NULL;
+		errType = pyString(ptypeName);
+		Py_XDECREF(ptypeName);
+		std::string errMsg;
+		PyObject *pmsg = pvalue ? PyObject_GetAttrString(pvalue, "msg") : NULL;
+		if (pmsg)
 		{
-			*end = '\0';
-		}
-		end = index(err_msg, '(');
-		if (end)
-		{
-			*end = ' ';
-		}
-
-
-		if (error_line == NULL || actual_line_no == NULL || strcmp(error_line, "<NULL>") == 0
-			       	|| strcmp(actual_line_no, "<NULL>") == 0)
-		{
-			m_logger->error("Python error: %s in supplied script", err_msg);
+			errMsg = pyString(pmsg);
+			Py_DECREF(pmsg);
 		}
 		else
 		{
-			m_logger->error("Python error: %s in %s at line %s of supplied script", err_msg, error_line, actual_line_no);
+			PyErr_Clear();
+			errMsg = pyString(pvalue);
+		}
+		std::string err_msg = errType.empty() ? errMsg : errType + " " + errMsg;
+
+		// SyntaxError carries the line number and text, other exceptions do not
+		std::string actual_line_no;
+		std::string error_line;
+		if (pvalue)
+		{
+			PyObject *line_no = PyObject_GetAttrString(pvalue, "lineno");
+			if (line_no && line_no != Py_None)
+			{
+				actual_line_no = pyString(line_no);
+			}
+			Py_XDECREF(line_no);
+			PyErr_Clear();
+
+			PyObject *ptext = PyObject_GetAttrString(pvalue, "text");
+			if (ptext && ptext != Py_None)
+			{
+				error_line = pyString(ptext);
+				// Remove the trailing newline from the string
+				while (!error_line.empty() && (error_line.back() == '\n' || error_line.back() == '\r'))
+				{
+					error_line.pop_back();
+				}
+			}
+			Py_XDECREF(ptext);
+			PyErr_Clear();
+		}
+
+		if (error_line.empty() || actual_line_no.empty())
+		{
+			m_logger->error("Python error: %s in supplied script", err_msg.c_str());
+		}
+		else
+		{
+			m_logger->error("Python error: %s in %s at line %s of supplied script",
+					err_msg.c_str(), error_line.c_str(), actual_line_no.c_str());
 		}
 
 		PyErr_Clear();
-		Py_CLEAR(line_no);
-		Py_CLEAR(line_no_str);
-		Py_CLEAR(line_no_unicode);
-		Py_CLEAR(ptext);
-		Py_CLEAR(ptext_str);
-		Py_CLEAR(ptext_no_unicode);
-		Py_CLEAR(pstr);
-		Py_CLEAR(perr);
+		Py_XDECREF(ptype);
+		Py_XDECREF(pvalue);
+		Py_XDECREF(ptraceback);
 	}
 }
 
@@ -511,7 +599,7 @@ bool Python35Filter::reconfigure(const string& newConfig)
 		m_failedScript = false;
 		m_execCount = 0;
 		// Reimport module
-		PyObject* newModule = PyImport_ReloadModule(m_pModule);
+		PyObject* newModule = loadScript(newScript);
 		if (newModule)
 		{
 			// Cleanup Loaded module
@@ -556,7 +644,7 @@ bool Python35Filter::reconfigure(const string& newConfig)
 		m_pythonScript = newScript;
 
 		// Import the new module
-		PyObject* newModule = PyImport_ImportModule(m_pythonScript.c_str());
+		PyObject* newModule = loadScript(m_pythonScript);
 
 		// Set reloaded module
 		m_pModule = newModule;
@@ -734,7 +822,7 @@ bool Python35Filter::configure()
 	// 2) Import Python script if module object is not set
 	if (!m_pModule)
 	{
-		m_pModule = PyImport_ImportModule(m_pythonScript.c_str());
+		m_pModule = loadScript(m_pythonScript);
 	}
 
 	// Check whether the Python module has been imported

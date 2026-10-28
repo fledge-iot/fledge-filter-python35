@@ -40,6 +40,7 @@ class Python35Filter : public FledgeFilter
 		{
 			m_pModule = NULL;
 			m_pFunc = NULL;
+			m_sandbox = NULL;
 			m_init = false;
 			m_encode_names = true;
 			m_logger = Logger::getLogger();
@@ -64,6 +65,7 @@ class Python35Filter : public FledgeFilter
 		void	lock() { m_configMutex.lock(); };
 		void	unlock() { m_configMutex.unlock(); };
 		void	logErrorMessage();
+		PyObject*	loadScript(const std::string& scriptName);
 		// Filtering methods for Reading objects
 		PyObject*
 			createReadingsList(const std::vector<Reading *>& readings);
@@ -75,6 +77,8 @@ class Python35Filter : public FledgeFilter
 		PyObject*	m_pModule;
 		// Python 3.5 callable method handle
 		PyObject*	m_pFunc;
+		// Restricted script loader function
+		PyObject*	m_sandbox;
 		// Python 3.5  script name
 		std::string	m_pythonScript;
 		// Python interpreter has been started by this plugin

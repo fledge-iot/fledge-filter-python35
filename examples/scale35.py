@@ -10,22 +10,18 @@ __copyright__ = "Copyright (c) 2019 Dianomic Systems"
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
-import sys
 import json
-import logging
-from logging.handlers import SysLogHandler
-import os
 
-# Log to syslog
-handler = SysLogHandler(address='/dev/log')
-formatter = logging.Formatter(fmt='Fledge[%(process)d] %(levelname)s: %(name)s: %(message)s')
-handler.setFormatter(formatter)
-# When embedded Python is in use sys.argv is not defined,
-logger = logging.getLogger(os.path.basename(__file__))
+# Filter scripts run in a restricted environment: os, sys, subprocess, socket,
+# logging and similar modules can not be imported, so diagnostics go to stdout.
 
-# Set mininum log severity
-logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+
+class _Logger(object):
+    def debug(self, msg):
+        print("DEBUG: " + msg)
+
+
+logger = _Logger()
 
 """
 Filter configuration set by set_filter_config(config)

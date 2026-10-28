@@ -1,0 +1,50 @@
+# Fledge built from the ./fledge submodule with this plugin installed.
+#
+#   docker compose up --build    start Fledge (REST API on :8081)
+#   docker compose down -v       stop and remove the data
+#   docker compose --profile test run --build --rm test
+#                                build and run the unit tests (see the test service)
+#
+# The first build compiles all of Fledge and takes a long time.
+# The south sinusoid plugin is installed, add it with:
+#   curl -X POST localhost:8081/fledge/service -d '{"name":"sin","type":"south","plugin":"sinusoid","enabled":true}'
+# The example scripts are mounted read-only at /examples.
+services:
+  fledge:
+    image: fledge-python35:dev
+    build:
+      context: .
+      dockerfile: .ci/deb/Dockerfile
+      target: runtime
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-ubuntu:24.04}
+    ports:
+      - "8081:8081"
+      - "1995:1995"
+    volumes:
+      - fledge-data:/usr/local/fledge/data
+      - ./examples:/examples:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/fledge/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  # Unit tests. Building the image already runs them (the Dockerfile test stage
+  # fails the build if a test fails); running the service runs them again, e.g.
+  #   docker compose --profile test run --rm test --gtest_filter='*Sandbox*'
+  test:
+    image: fledge-python35:test
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: .ci/deb/Dockerfile
+      target: test
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-ubuntu:24.04}
+    working_dir: /build/plugin/tests-build
+    entrypoint: ["./RunTests"]
+
+volumes:
+  fledge-data:

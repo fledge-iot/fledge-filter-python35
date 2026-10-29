@@ -132,7 +132,11 @@ class _Checker(ast.NodeVisitor):
             self.fail(node, "import of module '%s' is not permitted in a "
                       "filter script (line %s)" % (node.module, node.lineno))
         for alias in node.names:
-            if alias.name == '*' or _is_denied(alias.name):
+            # Dunder names such as json.__builtins__ expose the real builtins,
+            # private names such as random._os expose modules that are denied
+            if (alias.name == '*' or _is_denied(alias.name)
+                    or alias.name in BLOCKED_BUILTIN_NAMES
+                    or alias.name.startswith('_')):
                 self.fail(node, "import of '%s' from '%s' is not permitted in a "
                           "filter script (line %s)" %
                           (alias.name, node.module, node.lineno))
@@ -168,8 +172,24 @@ def check_source(source, filename='<script>', allowed=None):
     return compile(tree, filename, 'exec')
 
 
+def _public_facade(module, allowed):
+    """A copy of module that only has its public names. Private names often
+    refer to modules that are denied, for example random._os, and attribute
+    access does not go through __import__. Modules that are not on the
+    allow-list are left out as well."""
+    facade = _types.ModuleType(module.__name__)
+    for key, value in vars(module).items():
+        if key.startswith('_'):
+            continue
+        if isinstance(value, _types.ModuleType) and value.__name__ not in allowed:
+            continue
+        setattr(facade, key, value)
+    return facade
+
+
 def _make_import(allowed):
     real_import = _builtins.__import__
+    facades = {}
 
     def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
         if level != 0 or _is_denied(name) or name not in allowed:
@@ -180,7 +200,10 @@ def _make_import(allowed):
             sub = getattr(module, item, None)
             if isinstance(sub, _types.ModuleType) and sub.__name__ not in allowed:
                 raise _import_error(sub.__name__)
-        return module
+        facade = facades.get(module.__name__)
+        if facade is None:
+            facade = facades[module.__name__] = _public_facade(module, allowed)
+        return facade
 
     return restricted_import
 

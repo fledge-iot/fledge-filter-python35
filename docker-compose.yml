@@ -1,4 +1,4 @@
-# Fledge built from the ./fledge submodule with this plugin installed.
+# Fledge built from source (cloned during the image build, see FLEDGE_REF in the Dockerfile) with this plugin installed.
 #
 #   docker compose up --build    start Fledge (REST API on :8081)
 #   docker compose down -v       stop and remove the data

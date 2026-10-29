@@ -42,12 +42,12 @@ set(NEEDED_FLEDGE_LIBS common-lib plugins-common-lib filters-common-lib services
 # Find source files
 file(GLOB SOURCES *.cpp)
 
-# Find python3.x dev/lib package
+# Find python3.x dev/lib package, 3.8 or later
 find_package(PkgConfig REQUIRED)
 if(${CMAKE_VERSION} VERSION_LESS "3.12.0") 
-    pkg_check_modules(PYTHON REQUIRED python3)
+    pkg_check_modules(PYTHON REQUIRED python3>=3.8)
 else()
-    find_package(Python COMPONENTS Interpreter Development)
+    find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development)
 endif()
 
 # Find Fledge includes and libs, by including FindFledge.cmak file
@@ -107,7 +107,7 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES} version.h)
 target_link_libraries(${PROJECT_NAME} ${NEEDED_FLEDGE_LIBS})
 
 # Add additional libraries
-# Add Python 3.5 library
+# Add Python library
 if(${CMAKE_VERSION} VERSION_LESS "3.12.0") 
     target_link_libraries(${PROJECT_NAME} ${PYTHON_LIBRARIES})
 else()

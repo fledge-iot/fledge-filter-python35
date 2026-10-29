@@ -2,11 +2,11 @@
 Fledge "Python35" C++ Filter plugin
 =========================================
 
-A readings data transformation plugin using Python 3.5
-embedded interpreter.
+A readings data transformation plugin using an embedded Python 3
+interpreter. The name is historic, Python 3.8 or later is required.
 
 NOTE:
-Python3.5 development package is required.
+Python 3.8 or later and its development package are required.
 
 Build
 -----

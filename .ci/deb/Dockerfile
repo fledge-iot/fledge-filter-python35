@@ -23,10 +23,14 @@ WORKDIR /build
 COPY . /build/plugin
 
 RUN find /build/plugin -type f -print0 \
-        | xargs -0 -r dos2unix -q 2>/dev/null || true \
-    && chmod +x /build/plugin/fledge/requirements.sh \
-        /build/plugin/.ci/deb/generate_control.sh \
-        /build/plugin/.ci/deb/package_deb.sh
+        | xargs -0 -r dos2unix -q 2>/dev/null || true
+
+# Fledge core, built from source. It is not part of this repository (there is no
+# submodule), so it is cloned here. Override with --build-arg FLEDGE_REF=<branch|tag>
+ARG FLEDGE_REPO=https://github.com/fledge-iot/fledge.git
+ARG FLEDGE_REF=develop
+RUN git clone --quiet --depth 1 --branch "${FLEDGE_REF}" "${FLEDGE_REPO}" /build/plugin/fledge \
+    && chmod +x /build/plugin/fledge/requirements.sh
 
 WORKDIR /build/plugin/fledge
 RUN bash ./requirements.sh
@@ -44,7 +48,6 @@ RUN mkdir -p build && cd build \
     && make -j"$(nproc)" \
     && make install
 
-RUN .ci/deb/package_deb.sh "${FLEDGE_INSTALL}" /artifacts
 
 # Run the plugin unit tests (gtest) against the Fledge build above:
 #   docker build -f .ci/deb/Dockerfile --target test .
@@ -70,7 +73,7 @@ RUN sed -i 's/-std=c++11/-std=c++14/' tests/CMakeLists.txt \
     && make -j"$(nproc)"
 RUN cd tests-build && ./RunTests
 
-# Runnable Fledge (from the submodule) with this plugin installed, see
+# Runnable Fledge (built from source) with this plugin installed, see
 # docker-compose.yml in the repository root.
 FROM builder AS runtime
 
@@ -98,6 +101,3 @@ RUN cp /build/plugin/.ci/compose/entrypoint.sh /usr/local/bin/entrypoint.sh \
 ENV FLEDGE_ROOT=/usr/local/fledge
 EXPOSE 8081 1995
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-
-FROM scratch AS artifact
-COPY --from=builder /artifacts/ /

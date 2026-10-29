@@ -26,10 +26,14 @@ RUN find /build/plugin -type f -print0 \
         | xargs -0 -r dos2unix -q 2>/dev/null || true
 
 # Fledge core, built from source. It is not part of this repository (there is no
-# submodule), so it is cloned here. Override with --build-arg FLEDGE_REF=<branch|tag>
+# submodule). If a checkout is already in ./fledge (as in CI) it is used, otherwise
+# it is cloned here. Override with --build-arg FLEDGE_REF=<branch|tag>
 ARG FLEDGE_REPO=https://github.com/fledge-iot/fledge.git
 ARG FLEDGE_REF=develop
-RUN git clone --quiet --depth 1 --branch "${FLEDGE_REF}" "${FLEDGE_REPO}" /build/plugin/fledge \
+RUN if [ ! -f /build/plugin/fledge/requirements.sh ]; then \
+        rm -rf /build/plugin/fledge \
+        && git clone --quiet --depth 1 --branch "${FLEDGE_REF}" "${FLEDGE_REPO}" /build/plugin/fledge; \
+    fi \
     && chmod +x /build/plugin/fledge/requirements.sh
 
 WORKDIR /build/plugin/fledge

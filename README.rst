@@ -2,11 +2,11 @@
 Fledge "Python35" C++ Filter plugin
 =========================================
 
-A readings data transformation plugin using Python 3.5
-embedded interpreter.
+A readings data transformation plugin using an embedded Python 3
+interpreter. The name is historic, Python 3.8 or later is required.
 
 NOTE:
-Python3.5 development package is required.
+Python 3.8 or later and its development package are required.
 
 Build
 -----
@@ -67,3 +67,46 @@ Examples:
   $ cmake -DFLEDGE_INSTALL=/home/source/develop/Fledge
 
   $ cmake -DFLEDGE_INSTALL=/usr/local/fledge
+
+Script restrictions
+-------------------
+
+Filter scripts (south and north, including those authored through the
+Configurator) run in a restricted environment (PT-HLN-HDP-26A-002, CWE-78).
+The script is checked when the filter starts and on every reconfigure, before
+any of its code runs:
+
+- an AST check rejects imports of anything outside the allow-list, relative
+  and star imports, dunder attribute access (``__class__``, ``__subclasses__``
+  ...), references to ``__import__``/``__builtins__``, and to ``eval``,
+  ``exec``, ``compile``, ``open``, ``getattr`` and similar builtins;
+- the script is then executed with restricted builtins and an ``__import__``
+  that enforces the same allow-list at run time.
+
+A rejected script is logged with the reason and line, the filter stays failed
+and drops readings (fail closed).
+
+Default allow-list: ``json math cmath time datetime re copy collections
+itertools functools string decimal fractions statistics numbers random bisect
+heapq struct base64 binascii hashlib hmac enum typing textwrap unicodedata``.
+Never importable: ``os subprocess socket sys ctypes importlib shutil io
+threading multiprocessing pickle urllib http logging.config`` and others, see
+``include/script_sandbox.h``. Scripts that used ``logging``, ``os`` or ``sys``
+(for example the old ``examples/scale35.py``) must be changed.
+
+**Decision: the allow-list is configurable per deployment, by the operator
+only.** The environment variable ``FLEDGE_PYTHON35_EXTRA_IMPORTS``
+(comma separated exact module names) adds modules to the default list. It is
+read from the Fledge service environment, not from the filter configuration
+category, because that category is editable by the same users who write the
+script. The deny-list can not be overridden. Adding modules widens the attack
+surface, review each one for ways to reach the OS (``logging`` can write
+files, for instance).
+
+This is defence in depth, not a complete sandbox: in-process Python
+restrictions are known to be bypassable by a determined author. Keep running
+Fledge with least privilege and restrict who can edit filter scripts. Checks
+at save time in the Portal/Configurator are a courtesy only; the enforcement
+is here.
+
+Tests: the ``PYTHON35.Sandbox*`` cases in ``tests/test_python35.cpp``.
